@@ -7,6 +7,7 @@ export type Path =
   | `/`
   | `/ds`
   | `/editor`
+  | `/workspace`
 
 export type Params = {
   

@@ -10,6 +10,13 @@ export const iconGutterMap = Facet.define<Record<number, string>, Record<number,
     combine: (values) => Object.assign({}, ...values),
 })
 
+// Added to internal line number when rendering / matching against iconGutterMap.
+// Use for embedded slices of a file so the gutter shows the source line
+// numbers rather than 1..N of the slice.
+export const iconGutterLineOffset = Facet.define<number, number>({
+    combine: (values) => values.reduce((a, b) => a + b, 0),
+})
+
 class IconMarker extends GutterMarker {
     constructor(private html: string) {
         super()
@@ -65,18 +72,20 @@ export function iconNumberGutter() {
         gutter({
             class: 'cm-iconNumberGutter',
             lineMarker(view, block) {
-                const lineNo = view.state.doc.lineAt(block.from).number
+                const internalNo = view.state.doc.lineAt(block.from).number
+                const offset = view.state.facet(iconGutterLineOffset)
+                const displayNo = internalNo + offset
                 const icons = view.state.facet(iconGutterMap)
-                const html = icons[lineNo]
+                const html = icons[displayNo]
                 if (html) return new IconMarker(html)
-                return new NumberMarker(String(lineNo))
+                return new NumberMarker(String(displayNo))
             },
             lineMarkerChange() {
-                // Re-render any time the doc structure changes; cheap markers.
                 return true
             },
             initialSpacer(view) {
-                const lastLine = view.state.doc.lines
+                const offset = view.state.facet(iconGutterLineOffset)
+                const lastLine = view.state.doc.lines + offset
                 return new NumberMarker(String(lastLine))
             },
         }),

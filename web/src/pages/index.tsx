@@ -49,6 +49,9 @@ export default function Home() {
                     <Link to='/editor'>
                         <Button variant='outline'>Code editor →</Button>
                     </Link>
+                    <Link to='/workspace'>
+                        <Button variant='outline'>Workspace →</Button>
+                    </Link>
                 </div>
 
                 <div className='font-mono text-xs text-muted-foreground'>

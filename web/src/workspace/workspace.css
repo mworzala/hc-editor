@@ -1,0 +1,34 @@
+/* Panel toggle animation — only while a programmatic toggle is in flight.
+   When the user is dragging a resize handle, react-resizable-panels updates
+   sizes 60×/sec; the transition is gated behind `.workspace-animating` so it
+   only kicks in for show/hide. */
+.workspace-animating [data-panel] {
+    transition:
+        flex-grow 220ms ease,
+        flex-basis 220ms ease;
+}
+
+/* react-resizable-panels' resize handle wrapper. We render our own gap-style
+   handle inside it; this just sets the container layout. */
+.workspace-resize-handle {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+}
+
+/* Thin scrollbar treatment for tab overflow. */
+[data-slot='workspace-tabbar'] {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+}
+[data-slot='workspace-tabbar']::-webkit-scrollbar {
+    height: 4px;
+}
+[data-slot='workspace-tabbar']::-webkit-scrollbar-track {
+    background: transparent;
+}
+[data-slot='workspace-tabbar']::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 2px;
+}

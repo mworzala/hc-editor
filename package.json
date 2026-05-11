@@ -1,0 +1,28 @@
+{
+    "name": "hollowcube-editor",
+    "private": true,
+    "workspaces": [
+        "common",
+        "design-system",
+        "web",
+        "desktop/frontend"
+    ],
+    "type": "module",
+    "scripts": {
+        "dev:web": "bun --filter @hollowcube/web dev",
+        "dev:desktop": "cd desktop && wails3 dev",
+        "build:web": "bun --filter @hollowcube/web build",
+        "build:desktop": "cd desktop && wails3 build",
+        "typecheck": "bun --filter '*' typecheck",
+        "lint": "oxlint",
+        "lint:fix": "oxlint --fix",
+        "format": "oxfmt",
+        "format:check": "oxfmt --check"
+    },
+    "devDependencies": {
+        "@types/node": "^22.10.0",
+        "oxfmt": "^0.48.0",
+        "oxlint": "^1.63.0",
+        "typescript": "^5.6.3"
+    }
+}

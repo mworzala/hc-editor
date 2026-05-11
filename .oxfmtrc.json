@@ -1,0 +1,42 @@
+{
+    "$schema": "./node_modules/oxfmt/configuration_schema.json",
+    "printWidth": 100,
+    "tabWidth": 4,
+    "useTabs": false,
+    "semi": false,
+    "singleQuote": true,
+    "jsxSingleQuote": true,
+    "trailingComma": "all",
+    "bracketSpacing": true,
+    "bracketSameLine": false,
+    "arrowParens": "always",
+    "endOfLine": "lf",
+    "insertFinalNewline": true,
+    "sortImports": {
+        "customGroups": [
+            {
+                "groupName": "hollowcube",
+                "elementNamePattern": ["^@hollowcube/.*"]
+            }
+        ],
+        "groups": [
+            ["builtin", "external"],
+            { "newlinesBetween": true },
+            "hollowcube",
+            { "newlinesBetween": true },
+            ["parent", "sibling", "index"]
+        ],
+        "newlinesBetween": true,
+        "ignoreCase": true,
+        "order": "asc"
+    },
+    "sortPackageJson": true,
+    "ignorePatterns": [
+        "node_modules/**",
+        "**/dist/**",
+        "**/build/**",
+        "desktop/frontend/bindings/**",
+        "**/.vite/**",
+        "bun.lock"
+    ]
+}

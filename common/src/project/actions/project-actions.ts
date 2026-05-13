@@ -8,9 +8,9 @@ import {
     type DockId,
     type Tab,
     type WorkspaceStore,
-} from '../workspace'
-import { type AnyEditorDefinition, type ToolDefinition } from './registry'
-import { useEditors, useTools } from './registry-context'
+} from '../../workspace'
+import { type AnyEditorDefinition, type ToolDefinition } from '../registry'
+import { useEditors, useTools } from '../registry-context'
 
 // Host-level actions that compose primitive store ops with project semantics
 // (tool/editor registries, mime resolution, identity matching). The workspace

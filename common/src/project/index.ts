@@ -24,6 +24,15 @@ export {
 } from './registry-context'
 export {
     useProjectActions,
+    useRegisterAction,
+    useActions,
+    useRunAction,
+    ActionRegistryProvider,
+    ActionHotkeyBridge,
+    type Action,
+    type ActionContextSet,
+    type ActionRunContext,
+    type ActionRunSource,
     type OpenEditorArgs,
     type OpenEditorTarget,
     type ProjectActions,
@@ -39,14 +48,5 @@ export {
     type DocumentId,
     type DocumentStore,
 } from './documents'
-export {
-    CommandHotkeyBridge,
-    CommandRegistryProvider,
-    useCommands,
-    useRegisterCommand,
-    useRunCommand,
-    type Command,
-    type CommandContext,
-} from './commands'
 export { AppErrorBoundary, PaneErrorBoundary } from './error-boundary'
 export { ProjectLoader, ProjectGate, HCClientProvider, useHCClient } from './data'

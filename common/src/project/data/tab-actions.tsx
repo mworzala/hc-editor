@@ -18,13 +18,13 @@ import {
     type WorkspaceStore,
 } from '../../workspace'
 import { type WorkspaceStoreHook } from '../../workspace/context'
-import { useRegisterCommand } from '../commands'
+import { useRegisterAction } from '../actions'
 
 // Host-level tab actions. Two surfaces:
 //
 //   • <TabContextMenu />     — right-click menu over a tab. Wires up via the
 //                              workspace primitive's `onTabContextMenu` hook.
-//   • <CloseFocusedTabCommand /> — registers Ctrl/Cmd+W (desktop only) to
+//   • <CloseFocusedTabAction />  — registers Ctrl/Cmd+W (desktop only) to
 //                                  close the focused leaf's active editor tab.
 //
 // Both live in the project layer because the workspace primitive is
@@ -152,9 +152,9 @@ function listSiblingIds(state: WorkspaceStore, loc: TabLocation): string[] {
     return leaf ? leaf.tabs.map((t) => t.id) : []
 }
 
-// --- Ctrl/Cmd+W command (desktop only) ---
+// --- Ctrl/Cmd+W action (desktop only) ---
 
-export function CloseFocusedTabCommand({ useStore }: { useStore: WorkspaceStoreHook }) {
+export function CloseFocusedTabAction({ useStore }: { useStore: WorkspaceStoreHook }) {
     const { kind: platform } = usePlatform()
 
     const handler = useCallback(() => {
@@ -166,7 +166,7 @@ export function CloseFocusedTabCommand({ useStore }: { useStore: WorkspaceStoreH
         store.closeTab({ kind: 'editor', leafId: focused.leafId }, focused.tab.id)
     }, [useStore])
 
-    const command = useMemo(
+    const action = useMemo(
         () => ({
             id: 'editor.closeFocusedTab',
             title: 'Close Tab',
@@ -179,15 +179,15 @@ export function CloseFocusedTabCommand({ useStore }: { useStore: WorkspaceStoreH
     // Web browsers reserve Cmd/Ctrl+W for the tab/window close action. Only
     // register the hotkey when running inside the desktop shell.
     const Bridge = platform === 'desktop' ? RegisterBridge : NoopRegister
-    return <Bridge command={command} />
+    return <Bridge action={action} />
 }
 
-function RegisterBridge({ command }: { command: Parameters<typeof useRegisterCommand>[0] }) {
-    useRegisterCommand(command)
+function RegisterBridge({ action }: { action: Parameters<typeof useRegisterAction>[0] }) {
+    useRegisterAction(action)
     return null
 }
 
-function NoopRegister(_props: { command: unknown }): ReactNode {
+function NoopRegister(_props: { action: unknown }): ReactNode {
     return null
 }
 

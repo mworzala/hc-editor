@@ -13,13 +13,17 @@ import {
     type TabLocation,
 } from '../workspace'
 import { type WorkspaceStoreHook } from '../workspace/context'
-import { useProjectActions } from './actions'
-import { CommandHotkeyBridge, CommandRegistryProvider, useRegisterCommand } from './commands'
+import {
+    ActionHotkeyBridge,
+    ActionRegistryProvider,
+    useProjectActions,
+    useRegisterAction,
+} from './actions'
 import { ProjectGate } from './data'
 import { ProjectEventsProvider } from './data/events'
 import { ProjectLoader } from './data/loader'
 import { PendingFilesProvider, usePendingFilesStore } from './data/pending-files'
-import { CloseFocusedTabCommand, useTabContextMenu } from './data/tab-actions'
+import { CloseFocusedTabAction, useTabContextMenu } from './data/tab-actions'
 import { DockAddToolButton } from './DockAddToolButton'
 import { DockEmptyState } from './DockEmptyState'
 import { DocumentStoreProvider, useDocumentStore } from './documents'
@@ -60,13 +64,13 @@ export function ProjectWorkspace() {
                     <DocumentStoreProvider>
                         <PendingFilesProvider>
                             <ProjectEventsProvider projectId={PROJECT_ID}>
-                                <CommandRegistryProvider>
+                                <ActionRegistryProvider>
                                     <TooltipProvider>
                                         <ProjectGate>
                                             <ProjectWorkspaceInner />
                                         </ProjectGate>
                                     </TooltipProvider>
-                                </CommandRegistryProvider>
+                                </ActionRegistryProvider>
                             </ProjectEventsProvider>
                         </PendingFilesProvider>
                     </DocumentStoreProvider>
@@ -128,9 +132,9 @@ function ProjectWorkspaceInner() {
 
     return (
         <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
-            <NewFileCommand useStore={useStore} />
-            <CloseFocusedTabCommand useStore={useStore} />
-            <CommandHotkeyBridge />
+            <NewFileAction useStore={useStore} />
+            <CloseFocusedTabAction useStore={useStore} />
+            <ActionHotkeyBridge />
             <ProjectTopBar useStore={useStore} />
             <div className='min-h-0 flex-1'>
                 <Workspace
@@ -189,7 +193,7 @@ function formatErr(err: unknown): string {
 // `<Workspace>` (so `useWorkspaceContext` isn't available); we call the
 // workspace store directly via the `useStore` prop and reach the focused leaf
 // using the same selector that `useProjectActions` would.
-function NewFileCommand({ useStore }: { useStore: WorkspaceStoreHook }) {
+function NewFileAction({ useStore }: { useStore: WorkspaceStoreHook }) {
     const pendingStore = usePendingFilesStore()
 
     const handler = useCallback(() => {
@@ -207,7 +211,7 @@ function NewFileCommand({ useStore }: { useStore: WorkspaceStoreHook }) {
         )
     }, [pendingStore, useStore])
 
-    const command = useMemo(
+    const action = useMemo(
         () => ({
             id: 'editor.newFile',
             title: 'New Untitled File',
@@ -216,6 +220,6 @@ function NewFileCommand({ useStore }: { useStore: WorkspaceStoreHook }) {
         }),
         [handler],
     )
-    useRegisterCommand(command)
+    useRegisterAction(action)
     return null
 }

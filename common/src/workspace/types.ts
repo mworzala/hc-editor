@@ -79,6 +79,15 @@ export type WorkspaceState = {
     focusedLeafId: string | null
 }
 
-/** Map from `Tab.kind` to a render function. The host supplies one entry per
- *  kind it cares about; unknown kinds fall through to a built-in placeholder. */
-export type TabRegistry = Record<TabKind, (tab: Tab) => ReactNode>
+/** Per-kind handlers the host supplies. `render` produces the tab's content;
+ *  `icon` (optional) produces the small leading icon shown in the tab strip.
+ *  `Tab` itself can't carry a ReactNode (it's persisted as JSON), so icons
+ *  are resolved at render time from `kind` + `payload`. */
+export type TabRegistryEntry = {
+    render: (tab: Tab) => ReactNode
+    icon?: (tab: Tab) => ReactNode
+}
+
+/** Map from `Tab.kind` to its handlers. The host supplies one entry per kind
+ *  it cares about; unknown kinds fall through to a built-in placeholder. */
+export type TabRegistry = Record<TabKind, TabRegistryEntry>

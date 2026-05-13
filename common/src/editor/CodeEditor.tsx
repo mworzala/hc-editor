@@ -35,6 +35,7 @@ import {
     EDITOR_CONTEXT_MENU_EVENT,
     type EditorContextMenuDetail,
 } from './extensions/contextMenu'
+import { flashHighlight, setFlashHighlight } from './extensions/flashHighlight'
 import { wideFoldGutter } from './extensions/foldGutter'
 import {
     highlightLinesFacet,
@@ -69,6 +70,10 @@ export type CodeEditorProps = {
     /** Imperatively center this line in the viewport on mount and whenever the
      *  prop value changes. 1-indexed against the rendered doc (not source). */
     scrollToLine?: number
+    /** Brief highlight band painted over this range on mount + whenever the
+     *  prop reference changes. Use for "you just landed here" feedback from
+     *  go-to-definition. The band fades over ~800ms then clears itself. */
+    flashRange?: { from: number; to: number }
     /** If true, focusing the editor surfaces an onFocus callback the caller
      *  can use to jump the parent editor + close popups. */
     onFocus?: () => void
@@ -143,6 +148,7 @@ function CodeEditor({
     highlightRanges,
     highlightLines,
     scrollToLine,
+    flashRange,
     onFocus,
     onBlur,
     enableInteractions = true,
@@ -208,6 +214,7 @@ function CodeEditor({
             syntaxHighlighting(defaultHighlightStyle, { fallback: true }),
             languageExt,
             highlightRangesExtension(),
+            flashHighlight(),
             editorTheme(armadaDark),
             editorHighlightStyle(armadaDark),
             keymap.of([...defaultKeymap, ...historyKeymap, ...foldKeymap, indentWithTab]),
@@ -348,6 +355,22 @@ function CodeEditor({
         })
         return () => window.cancelAnimationFrame(id)
     }, [scrollToLine, value])
+
+    // Trigger the flash highlight on mount and whenever `flashRange` changes
+    // (cross-file go-to-def lands here after the new editor tab mounts). The
+    // RAF defer matches `scrollToLine` so the highlight paints once the doc
+    // is in place; the extension auto-clears the band after the fade.
+    React.useEffect(() => {
+        const view = viewRef.current
+        if (!view || !flashRange) return
+        const { from, to } = flashRange
+        if (from < 0 || to > view.state.doc.length || from >= to) return
+        const id = window.requestAnimationFrame(() => {
+            if (!view.state) return
+            view.dispatch({ effects: setFlashHighlight.of({ from, to }) })
+        })
+        return () => window.cancelAnimationFrame(id)
+    }, [flashRange, value])
 
     // Surface focus to the parent (used by the snippet → jump-and-close flow).
     React.useEffect(() => {

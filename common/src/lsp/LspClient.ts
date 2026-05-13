@@ -210,9 +210,15 @@ export class LspClient {
         for (const cb of this.rpcListeners) cb(this.rpcMessages)
     }
 
-    onDiagnostics(cb: DiagnosticsListener): () => void {
+    onDiagnostics(
+        cb: DiagnosticsListener,
+        options: { replay?: boolean } = {},
+    ): () => void {
+        const replay = options.replay ?? true
         this.diagnosticsListeners.add(cb)
-        for (const [uri, diags] of this.latestDiagnostics) cb(uri, diags)
+        if (replay) {
+            for (const [uri, diags] of this.latestDiagnostics) cb(uri, diags)
+        }
         return () => {
             this.diagnosticsListeners.delete(cb)
         }

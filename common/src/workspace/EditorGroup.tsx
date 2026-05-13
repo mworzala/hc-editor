@@ -5,11 +5,11 @@ import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortabl
 import { cn } from '@hollowcube/design-system'
 
 import { EDGE_ZONE_PCT } from './constants'
-import { renderTabViaRegistry, useWorkspaceContext } from './context'
+import { renderTabIconViaRegistry, renderTabViaRegistry, useWorkspaceContext } from './context'
 import { makeDragData } from './drag-data'
 import { ResizeHandle } from './ResizeHandle'
 import { TabBar } from './TabBar'
-import { type EditorGroupNode } from './types'
+import { type EditorGroupNode, type Tab } from './types'
 
 type EditorGroupProps = {
     node: EditorGroupNode
@@ -78,6 +78,7 @@ function LeafNode({
 }: EditorGroupProps & { node: Extract<EditorGroupNode, { kind: 'leaf' }> }) {
     const { tabRegistry, onTabContextMenu } = useWorkspaceContext()
     const paneId = `editor:${node.id}`
+    const iconFor = (tab: Tab) => renderTabIconViaRegistry(tabRegistry, tab)
 
     const tabsDroppable = useDroppable({
         id: paneId,
@@ -116,6 +117,7 @@ function LeafNode({
                     onActivate={(id) => onActivate(node.id, id)}
                     onClose={(id) => onClose(node.id, id)}
                     onContextMenu={onTabContextMenu}
+                    iconFor={iconFor}
                 />
             </SortableContext>
 

@@ -36,15 +36,34 @@ function toCmDiagnostics(view: EditorView, diagnostics: Diagnostic[]): CmDiagnos
 
 export function lspDiagnostics(client: LspClient, uri: string) {
     const plugin = ViewPlugin.define((view) => {
+        let destroyed = false
         const apply = (diags: Diagnostic[]) => {
+            if (destroyed) return
             view.dispatch(setDiagnostics(view.state, toCmDiagnostics(view, diags)))
         }
-        const unsubscribe = client.onDiagnostics((u, diags) => {
-            if (u !== uri) return
-            apply(diags)
+        // Replay any diagnostics the LSP client has already cached for this
+        // URI. We defer this to a microtask so the dispatch lands AFTER the
+        // view-plugin constructor returns — CM silently drops transactions
+        // that race the initial view setup, which is exactly what happens
+        // when an editor tab is re-mounted (tab switch) against a still-warm
+        // LSP cache.
+        queueMicrotask(() => {
+            if (destroyed) return
+            apply(client.getDiagnostics(uri))
         })
+        // Subscribe for live updates. We DO NOT replay on subscribe here
+        // (the queueMicrotask above already handles initial state) — the
+        // listener fires only for subsequent publishes.
+        const unsubscribe = client.onDiagnostics(
+            (u, diags) => {
+                if (u !== uri) return
+                apply(diags)
+            },
+            { replay: false },
+        )
         return {
             destroy() {
+                destroyed = true
                 unsubscribe()
             },
         }

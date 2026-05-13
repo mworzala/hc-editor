@@ -53,21 +53,21 @@ export function ProjectTopBar({ useStore }: ProjectTopBarProps) {
                     active={docksVisible.left}
                     onToggle={toggleDock}
                     label='Toggle file panel'
-                    icon={<PanelLeftIcon />}
+                    icon={<PanelLeftIcon className='size-4' />}
                 />
                 <ToggleDockButton
                     dock='bottom'
                     active={docksVisible.bottom}
                     onToggle={toggleDock}
                     label='Toggle bottom panel'
-                    icon={<PanelBottomIcon />}
+                    icon={<PanelBottomIcon className='size-4' />}
                 />
                 <ToggleDockButton
                     dock='right'
                     active={docksVisible.right}
                     onToggle={toggleDock}
                     label='Toggle right panel'
-                    icon={<PanelRightIcon />}
+                    icon={<PanelRightIcon className='size-4' />}
                 />
             </div>
 
@@ -92,7 +92,7 @@ export function ProjectTopBar({ useStore }: ProjectTopBarProps) {
                     aria-label='Settings'
                     style={isDesktop ? noDragRegionStyle : undefined}
                 >
-                    <SettingsIcon />
+                    <SettingsIcon className='size-4' />
                 </Button>
             </div>
         </header>

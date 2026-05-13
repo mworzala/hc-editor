@@ -18,6 +18,9 @@ type TabBarProps = {
      *  render a context menu. The workspace primitive itself stays
      *  menu-agnostic. */
     onContextMenu?: (info: { paneId: string; tabId: string; x: number; y: number }) => void
+    /** Optional leading-icon resolver. Returning `null`/`undefined` renders
+     *  no icon for that tab. */
+    iconFor?: (tab: Tab) => React.ReactNode
     /** Rendered after the tab list — host slot for things like an "add tab" button. */
     trailing?: React.ReactNode
 }
@@ -29,6 +32,7 @@ export function TabBar({
     onActivate,
     onClose,
     onContextMenu,
+    iconFor,
     trailing,
 }: TabBarProps) {
     const scrollerRef = React.useRef<HTMLDivElement | null>(null)
@@ -59,6 +63,7 @@ export function TabBar({
                     active={tab.id === activeId}
                     onActivate={onActivate}
                     onClose={onClose}
+                    icon={iconFor?.(tab)}
                     onContextMenu={
                         onContextMenu
                             ? (e) => {
@@ -88,6 +93,7 @@ type SortableTabProps = {
     active: boolean
     onActivate: (id: string) => void
     onClose: (id: string) => void
+    icon?: React.ReactNode
     onContextMenu?: (e: React.MouseEvent) => void
 }
 
@@ -97,6 +103,7 @@ function SortableTab({
     active,
     onActivate,
     onClose,
+    icon,
     onContextMenu,
 }: SortableTabProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -112,7 +119,7 @@ function SortableTab({
                 transition,
             }}
             className={cn(
-                'group/tab inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-[0.75rem] leading-none select-none font-medium',
+                'group/tab inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-sm leading-none select-none font-medium',
                 'cursor-pointer transition-colors',
                 active
                     ? 'bg-secondary text-secondary-foreground'
@@ -124,6 +131,11 @@ function SortableTab({
             {...attributes}
             {...listeners}
         >
+            {icon ? (
+                <span className='inline-flex size-3.5 shrink-0 items-center justify-center'>
+                    {icon}
+                </span>
+            ) : null}
             <span className='truncate'>{tab.title}</span>
             <button
                 type='button'

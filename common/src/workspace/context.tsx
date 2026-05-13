@@ -43,11 +43,17 @@ export function useWorkspaceContext(): WorkspaceContextValue {
 /** Render a tab via the host-supplied registry, falling back to a placeholder
  *  when the kind isn't registered. */
 export function renderTabViaRegistry(registry: TabRegistry, tab: Tab): ReactNode {
-    const renderer = registry[tab.kind]
-    if (renderer) return renderer(tab)
+    const entry = registry[tab.kind]
+    if (entry) return entry.render(tab)
     return (
         <div className='text-muted-foreground p-4 text-xs'>
             Unknown tab kind: <code>{tab.kind}</code>
         </div>
     )
+}
+
+/** Resolve a tab's leading icon from the registry. Returns `null` when the
+ *  kind isn't registered or its entry didn't supply an `icon` resolver. */
+export function renderTabIconViaRegistry(registry: TabRegistry, tab: Tab): ReactNode {
+    return registry[tab.kind]?.icon?.(tab) ?? null
 }

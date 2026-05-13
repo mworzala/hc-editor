@@ -26,6 +26,7 @@ import { useProjectActions } from '../actions'
 import { useProject } from '../context'
 import { usePendingFile, usePendingFilesStore } from '../data/pending-files'
 import { useDocument, useDocumentStore } from '../documents'
+import { renderFileIcon } from '../file-icons'
 import { type EditorDefinition } from '../registry'
 import { DOCS_EDITOR_KIND } from './docs'
 
@@ -42,6 +43,17 @@ import { DOCS_EDITOR_KIND } from './docs'
 
 export const TEXT_EDITOR_KIND = 'editor:text'
 
+/** Inclusive 1-indexed line + 0-indexed column ranges, captured at the LSP
+ *  layer (line/character tuples) before we know the target document's
+ *  contents. The text editor converts these to offsets after the document
+ *  loads. */
+export type FlashLspRange = {
+    startLine: number
+    startCharacter: number
+    endLine: number
+    endCharacter: number
+}
+
 export type TextEditorPayload = {
     path?: string
     tempId?: string
@@ -49,6 +61,10 @@ export type TextEditorPayload = {
      *  clears the field so subsequent activations don't re-scroll. Set by the
      *  search popup's text-search result invocation. */
     scrollToLine?: number
+    /** One-shot: when set, the editor flashes this range on mount. Used by
+     *  cross-file go-to-definition so the user sees where they landed.
+     *  Scrubbed after first use. */
+    flashLspRange?: FlashLspRange
 }
 
 function parseTextPayload(raw: unknown): TextEditorPayload {
@@ -58,6 +74,16 @@ function parseTextPayload(raw: unknown): TextEditorPayload {
     if (typeof obj.path === 'string') out.path = obj.path
     if (typeof obj.tempId === 'string') out.tempId = obj.tempId
     if (typeof obj.scrollToLine === 'number') out.scrollToLine = obj.scrollToLine
+    if (
+        obj.flashLspRange &&
+        typeof obj.flashLspRange === 'object' &&
+        typeof (obj.flashLspRange as FlashLspRange).startLine === 'number' &&
+        typeof (obj.flashLspRange as FlashLspRange).startCharacter === 'number' &&
+        typeof (obj.flashLspRange as FlashLspRange).endLine === 'number' &&
+        typeof (obj.flashLspRange as FlashLspRange).endCharacter === 'number'
+    ) {
+        out.flashLspRange = obj.flashLspRange as FlashLspRange
+    }
     return out
 }
 
@@ -71,6 +97,24 @@ function basename(path: string): string {
     return i === -1 ? path : path.slice(i + 1)
 }
 
+/** Convert an LSP `{ line, character }` (UTF-16 code units, 0-indexed) to a
+ *  document offset in `text`. Clamps out-of-range positions to the nearest
+ *  valid offset so a stale flash hint can't crash the editor. */
+function lspPosToOffset(text: string, line: number, character: number): number {
+    if (line < 0) return 0
+    let offset = 0
+    let currentLine = 0
+    while (currentLine < line) {
+        const nl = text.indexOf('\n', offset)
+        if (nl === -1) return text.length
+        offset = nl + 1
+        currentLine++
+    }
+    const nextNl = text.indexOf('\n', offset)
+    const lineEnd = nextNl === -1 ? text.length : nextNl
+    return Math.min(offset + Math.max(0, character), lineEnd)
+}
+
 // Stored as the unknown-payload variant so it can live in the registry's
 // `AnyEditorDefinition[]` array. Casts at the boundary are safe because
 // `parsePayload` narrows everything that flows through.
@@ -79,6 +123,10 @@ export const textEditor: EditorDefinition = {
     mimeTypes: ['text/*', 'application/json', 'application/luau', 'text/x-luau'],
     parsePayload: (raw) => parseTextPayload(raw),
     titleFor: (payload) => titleFor(payload as TextEditorPayload),
+    iconFor: (payload) => {
+        const p = payload as TextEditorPayload
+        return renderFileIcon(p.path ?? '')
+    },
     render: ({ tab, payload }) => <TextTab tab={tab} payload={payload as TextEditorPayload} />,
 }
 
@@ -135,11 +183,20 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         !!effectivePath
 
     const definitionOpenHandler = useCallback(
-        (resolved: ResolvedUri) => {
+        (resolved: ResolvedUri, targetRange?: { start: { line: number; character: number }; end: { line: number; character: number } }) => {
             if (resolved.kind === 'file') {
+                const payload: Record<string, unknown> = { path: resolved.path }
+                if (targetRange) {
+                    payload.flashLspRange = {
+                        startLine: targetRange.start.line,
+                        startCharacter: targetRange.start.character,
+                        endLine: targetRange.end.line,
+                        endCharacter: targetRange.end.character,
+                    }
+                }
                 openEditor({
                     kind: TEXT_EDITOR_KIND,
-                    payload: { path: resolved.path },
+                    payload,
                     identityKey: 'path',
                 })
             } else if (resolved.kind === 'doc-module') {
@@ -295,18 +352,35 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const [savePromptOpen, setSavePromptOpen] = useState(false)
     const [saveError, setSaveError] = useState<unknown>(null)
 
-    // Honor scrollToLine on first mount of the tab — once we've taken the
-    // hint, scrub it from the persisted payload so re-activations of the
-    // same tab don't keep jumping back.
-    const initialScrollToLine = useRef(payload.scrollToLine).current
+    // Honor scrollToLine + flashLspRange on first mount of the tab — once
+    // we've taken the hint, scrub them from the persisted payload so
+    // re-activations of the same tab don't keep jumping or re-flashing.
+    // We re-latch them whenever the payload reference changes too, so a
+    // re-activation of an existing tab with a fresh hint (e.g. another
+    // cross-file go-to-def to the same file) picks them up.
+    const initialScrollToLine = payload.scrollToLine
+    const initialFlashLspRange = payload.flashLspRange
     useEffect(() => {
-        if (initialScrollToLine === undefined) return
-        if (payload.scrollToLine === undefined) return
+        if (initialScrollToLine === undefined && initialFlashLspRange === undefined) return
         useStore.getState().updateTab(tab.id, {
             payload: { path: payload.path, tempId: payload.tempId },
         })
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- run-once cleanup
-    }, [])
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: scrub on each new hint
+    }, [initialScrollToLine, initialFlashLspRange])
+
+    // Convert the LSP-coord flash range to document offsets once the
+    // document is loaded. A fresh object identity makes CodeEditor's flash
+    // effect re-fire when the user jumps here again.
+    const flashRange = useMemo(() => {
+        if (!initialFlashLspRange) return undefined
+        const text = doc?.current
+        if (text === undefined) return undefined
+        const r = initialFlashLspRange
+        const from = lspPosToOffset(text, r.startLine, r.startCharacter)
+        const to = lspPosToOffset(text, r.endLine, r.endCharacter)
+        if (to <= from) return undefined
+        return { from, to }
+    }, [initialFlashLspRange, doc?.current])
 
     const saveAtPath = useCallback(
         async (path: string) => {
@@ -398,6 +472,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                     suppressFoldGutter={luauLspActive}
                     apiRef={editorApiRef}
                     scrollToLine={initialScrollToLine}
+                    flashRange={flashRange}
                     onBlur={() => {
                         if (effectivePath) void save()
                     }}

@@ -3,10 +3,10 @@ import { SortableContext, horizontalListSortingStrategy } from '@dnd-kit/sortabl
 
 import { cn } from '@hollowcube/design-system'
 
-import { renderTabViaRegistry, useWorkspaceContext } from './context'
+import { renderTabIconViaRegistry, renderTabViaRegistry, useWorkspaceContext } from './context'
 import { makeDragData } from './drag-data'
 import { TabBar } from './TabBar'
-import { type DockId, type ToolDockState } from './types'
+import { type DockId, type Tab, type ToolDockState } from './types'
 
 type ToolDockProps = {
     dockId: DockId
@@ -28,6 +28,7 @@ export function ToolDock({
 }: ToolDockProps) {
     const { tabRegistry, renderEmpty, renderToolDockAdd, onTabContextMenu } = useWorkspaceContext()
     const paneId = `tool:${dockId}`
+    const iconFor = (tab: Tab) => renderTabIconViaRegistry(tabRegistry, tab)
     const { setNodeRef } = useDroppable({
         id: paneId,
         data: makeDragData({ kind: 'tool-dock', dockId }),
@@ -56,6 +57,7 @@ export function ToolDock({
                         onActivate={onActivate}
                         onClose={onClose}
                         onContextMenu={onTabContextMenu}
+                        iconFor={iconFor}
                         trailing={renderToolDockAdd?.(dockId)}
                     />
                 </SortableContext>

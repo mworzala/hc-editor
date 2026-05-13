@@ -71,7 +71,16 @@ export function useProjectActionsForStore(useStore: WorkspaceStoreHook): Project
             if (args.identityKey && args.payload?.[args.identityKey] !== undefined) {
                 const match = findTabByIdentity(store, editor.kind, args.identityKey, args.payload)
                 if (match) {
-                    store.activateTab({ kind: 'editor', leafId: match.leafId }, match.tabId)
+                    // Merge new payload fields into the existing tab's payload
+                    // so one-shot hints like `scrollToLine` / `flashLspRange`
+                    // take effect even when the tab is being re-activated.
+                    // Identity-key value matches by construction, so this
+                    // doesn't drift the tab's identity.
+                    if (args.payload) {
+                        const merged = { ...(match.tab.payload ?? {}), ...args.payload }
+                        store.updateTab(match.tab.id, { payload: merged })
+                    }
+                    store.activateTab({ kind: 'editor', leafId: match.leafId }, match.tab.id)
                     return
                 }
             }
@@ -147,7 +156,7 @@ function findTabByIdentity(
     kind: string,
     identityKey: string,
     payload: Record<string, unknown>,
-): { leafId: string; tabId: string } | null {
+): { leafId: string; tab: Tab } | null {
     const target = payload[identityKey]
     const locations = selectTabLocations(state)
     for (const [tabId, loc] of locations) {
@@ -157,7 +166,7 @@ function findTabByIdentity(
         const tab = leaf.tabs.find((t) => t.id === tabId)
         if (!tab || tab.kind !== kind) continue
         if (tab.payload?.[identityKey] === target) {
-            return { leafId: loc.leafId, tabId }
+            return { leafId: loc.leafId, tab }
         }
     }
     return null

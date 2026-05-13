@@ -1,6 +1,7 @@
 import { EditorView } from '@codemirror/view'
-import type { Location, LocationLink } from 'vscode-languageserver-types'
+import type { Location, LocationLink, Range as LspRange } from 'vscode-languageserver-types'
 
+import { setFlashHighlight } from '../../editor/extensions/flashHighlight'
 import { type LspClient } from '../LspClient'
 import { type ResolvedUri } from '../uriResolver'
 import { offsetToPosition, rangeToOffsets } from './lspUtils'
@@ -9,7 +10,10 @@ export type DefinitionResolver = (uri: string) => ResolvedUri
 
 /** Handler invoked when go-to-def lands somewhere outside the current file.
  *  Implementations route based on `resolved.kind`. */
-export type DefinitionOpenHandler = (resolved: ResolvedUri) => void
+/** Called when goto-definition lands somewhere outside the current file.
+ *  `targetRange` is the LSP `Range` of the target (line/character pairs);
+ *  pass it to the new editor so it can flash-highlight the landing spot. */
+export type DefinitionOpenHandler = (resolved: ResolvedUri, targetRange?: LspRange) => void
 
 /** Match the structure of the inline find-usages popup so the host can render
  *  references as if they came from the local string-scan path. The host owns
@@ -126,11 +130,15 @@ async function tryNavigate(
             // navigation to do. Let the next link in the chain handle it.
             return false
         }
-        view.dispatch({ selection: { anchor: from }, scrollIntoView: true })
+        view.dispatch({
+            selection: { anchor: from },
+            scrollIntoView: true,
+            effects: setFlashHighlight.of({ from, to }),
+        })
         return true
     }
 
-    onOpen(resolve(targetUri))
+    onOpen(resolve(targetUri), targetRange)
     return true
 }
 

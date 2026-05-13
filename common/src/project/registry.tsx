@@ -49,6 +49,9 @@ export type EditorDefinition<TPayload = unknown> = {
     parsePayload?: (raw: unknown) => TPayload
     /** Optional title resolver. Receives the parsed payload. */
     titleFor?: (payload: TPayload) => string
+    /** Optional leading-icon resolver for the tab strip. Receives the parsed
+     *  payload — typically used to pick a file-type icon from the file path. */
+    iconFor?: (payload: TPayload) => ReactNode
     render: (ctx: { tab: Tab; payload: TPayload }) => ReactNode
 }
 
@@ -63,14 +66,27 @@ export function buildTabRegistry(
     tools: readonly ToolDefinition[],
     editors: readonly AnyEditorDefinition[],
 ): TabRegistry {
-    const registry: Record<string, (tab: Tab) => ReactNode> = {}
+    const registry: TabRegistry = {}
     for (const tool of tools) {
-        registry[tool.kind] = (tab) => <PaneTabWrapper tab={tab}>{tool.render(tab)}</PaneTabWrapper>
+        registry[tool.kind] = {
+            render: (tab) => <PaneTabWrapper tab={tab}>{tool.render(tab)}</PaneTabWrapper>,
+            icon: () => tool.icon,
+        }
     }
     for (const editor of editors) {
-        registry[editor.kind] = (tab) => {
-            const payload = editor.parsePayload ? editor.parsePayload(tab.payload) : tab.payload
-            return <PaneTabWrapper tab={tab}>{editor.render({ tab, payload })}</PaneTabWrapper>
+        const parse = editor.parsePayload
+        const iconFor = editor.iconFor
+        registry[editor.kind] = {
+            render: (tab) => {
+                const payload = parse ? parse(tab.payload) : tab.payload
+                return <PaneTabWrapper tab={tab}>{editor.render({ tab, payload })}</PaneTabWrapper>
+            },
+            icon: iconFor
+                ? (tab) => {
+                      const payload = parse ? parse(tab.payload) : tab.payload
+                      return iconFor(payload)
+                  }
+                : undefined,
         }
     }
     return registry

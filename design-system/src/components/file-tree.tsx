@@ -1,6 +1,7 @@
 import * as React from 'react'
-import { ChevronRightIcon, FileIcon, FolderIcon, FolderOpenIcon } from 'lucide-react'
+import { ChevronRightIcon } from 'lucide-react'
 
+import { FolderFileIcon, FolderOpenFileIcon, UnknownFileIcon } from '../icons'
 import { cn } from '../utils'
 
 export type FileTreeNode =
@@ -74,12 +75,12 @@ function Node({
                 )}
                 {isFolder ? (
                     open ? (
-                        <FolderOpenIcon className='size-3.5 text-amber-300' />
+                        <FolderOpenFileIcon className='size-3.5' />
                     ) : (
-                        <FolderIcon className='size-3.5 text-amber-300/80' />
+                        <FolderFileIcon className='size-3.5' />
                     )
                 ) : (
-                    (node.icon ?? <FileIcon className='size-3.5 text-muted-foreground' />)
+                    (node.icon ?? <UnknownFileIcon className='size-3.5' />)
                 )}
                 <span className='truncate'>{node.name}</span>
             </button>

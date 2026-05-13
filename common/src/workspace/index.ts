@@ -7,6 +7,7 @@ export {
     clearWorkspaceStorage,
     makeId,
     selectTabLocations,
+    selectActiveContextTags,
     findLeaf,
     findFirstLeaf,
     resolveTargetLeaf,

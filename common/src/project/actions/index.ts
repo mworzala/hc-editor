@@ -12,6 +12,12 @@ export {
     useRunAction,
 } from './registry'
 export { ActionHotkeyBridge } from './hotkey-bridge'
+export {
+    ActionContextProvider,
+    actionMatchesContext,
+    useActionContextSet,
+    useActionContextSnapshot,
+} from './context'
 
 // Host-level project actions (open editor, open tool). Different concept from
 // the registry above, but lives in this folder because it's the same conceptual

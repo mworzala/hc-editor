@@ -171,6 +171,7 @@ export function CloseFocusedTabAction({ useStore }: { useStore: WorkspaceStoreHo
             id: 'editor.closeFocusedTab',
             title: 'Close Tab',
             keybinding: '$mod+w',
+            contexts: ['global'],
             run: handler,
         }),
         [handler],

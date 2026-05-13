@@ -9,6 +9,7 @@ import {
     type ReactNode,
 } from 'react'
 
+import { actionMatchesContext, useActionContextSnapshot } from './context'
 import { type Action, type ActionRunContext } from './types'
 
 // Storing actions in a Zustand-style ref-with-version dance instead of plain
@@ -115,8 +116,19 @@ export function useActions(): readonly Action[] {
 }
 
 /** Run an action by id. Returns true on success, false if not found or
- *  guarded. */
+ *  guarded by `when` / context filtering. Context filtering is applied here
+ *  so non-hotkey callers (search popup, native menu bridge) get consistent
+ *  behavior with the hotkey path. */
 export function useRunAction(): (id: string, ctx: ActionRunContext) => boolean {
     const registry = useActionRegistry()
-    return useCallback((id, ctx) => registry.run(id, ctx), [registry])
+    const getContextSnapshot = useActionContextSnapshot()
+    return useCallback(
+        (id, ctx) => {
+            const action = registry.get(id)
+            if (!action) return false
+            if (!actionMatchesContext(getContextSnapshot(), action.contexts)) return false
+            return registry.run(id, ctx)
+        },
+        [registry, getContextSnapshot],
+    )
 }

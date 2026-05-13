@@ -1,5 +1,6 @@
 import { useHotkey } from '@tanstack/react-hotkeys'
 
+import { actionMatchesContext, useActionContextSnapshot } from './context'
 import { useActions } from './registry'
 import { type Action } from './types'
 
@@ -13,27 +14,39 @@ type HotkeyArg = Parameters<typeof useHotkey>[0]
 // `<ActionHotkeyBridge />` inside the registry provider and the app's
 // keyboard surface stays in lockstep with the registry.
 //
-// Note: context-tag filtering is added in Phase 2 (the bridge will consult
-// `getActionContextSnapshot()` before invoking). For Phase 1 it just runs
-// the `when` guard like the old `CommandHotkeyBridge` did.
+// Context filtering is enforced at invoke time (not at bind time) via a
+// non-reactive snapshot of the active context set — so we don't re-bind every
+// keystroke when focus moves between tools/editors.
 
 export function ActionHotkeyBridge() {
     const actions = useActions()
+    const getContextSnapshot = useActionContextSnapshot()
     return (
         <>
             {actions
                 .filter((a) => a.keybinding)
                 .map((a) => (
-                    <HotkeyBinding key={a.id} action={a} />
+                    <HotkeyBinding
+                        key={a.id}
+                        action={a}
+                        getContextSnapshot={getContextSnapshot}
+                    />
                 ))}
         </>
     )
 }
 
-function HotkeyBinding({ action }: { action: Action }) {
+function HotkeyBinding({
+    action,
+    getContextSnapshot,
+}: {
+    action: Action
+    getContextSnapshot: () => ReadonlySet<string>
+}) {
     useHotkey(action.keybinding! as HotkeyArg, () => {
         if (action.when && !action.when()) return
         if (action.disabled) return
+        if (!actionMatchesContext(getContextSnapshot(), action.contexts)) return
         void action.run({ source: 'hotkey' })
     })
     return null

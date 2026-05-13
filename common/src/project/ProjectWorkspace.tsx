@@ -14,6 +14,7 @@ import {
 } from '../workspace'
 import { type WorkspaceStoreHook } from '../workspace/context'
 import {
+    ActionContextProvider,
     ActionHotkeyBridge,
     ActionRegistryProvider,
     useProjectActions,
@@ -131,22 +132,24 @@ function ProjectWorkspaceInner() {
     const renderToolDockAdd = useCallback((dockId: DockId) => <ToolDockAdd dockId={dockId} />, [])
 
     return (
-        <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
-            <NewFileAction useStore={useStore} />
-            <CloseFocusedTabAction useStore={useStore} />
-            <ActionHotkeyBridge />
-            <ProjectTopBar useStore={useStore} />
-            <div className='min-h-0 flex-1'>
-                <Workspace
-                    useStore={useStore}
-                    tabRegistry={tabRegistry}
-                    renderEmpty={renderEmpty}
-                    renderToolDockAdd={renderToolDockAdd}
-                    onTabContextMenu={tabContextMenu.onTabContextMenu}
-                />
+        <ActionContextProvider useStore={useStore}>
+            <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
+                <NewFileAction useStore={useStore} />
+                <CloseFocusedTabAction useStore={useStore} />
+                <ActionHotkeyBridge />
+                <ProjectTopBar useStore={useStore} />
+                <div className='min-h-0 flex-1'>
+                    <Workspace
+                        useStore={useStore}
+                        tabRegistry={tabRegistry}
+                        renderEmpty={renderEmpty}
+                        renderToolDockAdd={renderToolDockAdd}
+                        onTabContextMenu={tabContextMenu.onTabContextMenu}
+                    />
+                </div>
+                {tabContextMenu.node}
             </div>
-            {tabContextMenu.node}
-        </div>
+        </ActionContextProvider>
     )
 }
 
@@ -216,6 +219,7 @@ function NewFileAction({ useStore }: { useStore: WorkspaceStoreHook }) {
             id: 'editor.newFile',
             title: 'New Untitled File',
             keybinding: '$mod+n',
+            contexts: ['global'],
             run: handler,
         }),
         [handler],

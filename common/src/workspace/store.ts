@@ -397,6 +397,40 @@ export function resolveTargetLeaf(
     return findFirstLeaf(state.center)
 }
 
+/** Active "context tags" derived from workspace state, consumed by the action
+ *  registry to scope availability:
+ *
+ *   • `'global'` — always present.
+ *   • `'tool:<kind>'` — added for every tool whose tab is mounted in any dock.
+ *      Being mounted is enough; the dock doesn't need to be visible. We add
+ *      one tag per *distinct* tool kind across all three docks.
+ *   • `'editor:<kind>'` — kind of the active tab in the focused leaf. Single
+ *      value; only present when an editor is actually focused.
+ *
+ *  A tab is treated as a tool iff `kind` starts with `'tool:'`. */
+export function selectActiveContextTags(state: WorkspaceState): Set<string> {
+    const tags = new Set<string>()
+    tags.add('global')
+
+    for (const dock of ['left', 'right', 'bottom'] as const) {
+        for (const tab of state[dock].tabs) {
+            if (tab.kind.startsWith('tool:')) tags.add(tab.kind)
+        }
+    }
+
+    if (state.focusedLeafId) {
+        const leaf = findLeaf(state.center, state.focusedLeafId)
+        if (leaf && leaf.activeId) {
+            const active = leaf.tabs.find((t) => t.id === leaf.activeId)
+            if (active && !active.kind.startsWith('tool:')) {
+                tags.add(active.kind)
+            }
+        }
+    }
+
+    return tags
+}
+
 // ---------- pure tree helpers ----------
 
 function updateDockOrLeaf(

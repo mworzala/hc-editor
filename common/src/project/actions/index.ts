@@ -18,6 +18,7 @@ export {
     useActionContextSet,
     useActionContextSnapshot,
 } from './context'
+export { ActionContextMenu, type ActionContextMenuProps } from './ActionContextMenu'
 
 // Host-level project actions (open editor, open tool). Different concept from
 // the registry above, but lives in this folder because it's the same conceptual

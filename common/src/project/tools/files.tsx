@@ -1,21 +1,18 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { FilePlusIcon, FilesIcon } from 'lucide-react'
+import { FilePlusIcon, FilesIcon, Trash2Icon } from 'lucide-react'
 
 import { useV1ProjectFilesDelete, type ProjectFile } from '@hollowcube/api'
 import {
     Button,
     cn,
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuPortal,
     FileTree,
     type FileTreeNode,
     Input,
     ScrollArea,
 } from '@hollowcube/design-system'
 
-import { useProjectActions } from '../actions'
+import { ActionContextMenu, useProjectActions } from '../actions'
+import { type Action } from '../actions/types'
 import { useProject } from '../context'
 import { usePendingFiles, usePendingFilesStore } from '../data/pending-files'
 import { TEXT_EDITOR_KIND } from '../editors/text'
@@ -174,22 +171,46 @@ function FilesPane() {
                     {openError}
                 </div>
             ) : null}
-            <ContextMenu
-                state={ctx}
-                onOpenChange={(open) => !open && setCtx({ open: false })}
-                onNewFile={() => {
-                    const parent = newFileParent(ctx)
-                    setNewFile({ parent })
-                    setCtx({ open: false })
-                }}
-                onDelete={() => {
-                    const path = filePathFromCtx(ctx)
-                    setCtx({ open: false })
-                    if (path) handleDelete(path)
-                }}
-            />
+            {ctx.open ? (
+                <ActionContextMenu
+                    open={ctx.open}
+                    onOpenChange={(open) => !open && setCtx({ open: false })}
+                    x={ctx.x}
+                    y={ctx.y}
+                    actions={buildFilesContextActions(ctx, setNewFile, handleDelete)}
+                    className='w-44'
+                />
+            ) : null}
         </div>
     )
+}
+
+function buildFilesContextActions(
+    ctx: Extract<CtxMenuState, { open: true }>,
+    setNewFile: (target: NewFileTarget) => void,
+    onDelete: (path: string) => void,
+): Action[] {
+    const actions: Action[] = []
+    const parent = newFileParent(ctx)
+    actions.push({
+        id: 'files.newFile',
+        title: 'New file…',
+        group: 'files',
+        icon: <FilePlusIcon />,
+        run: () => setNewFile({ parent }),
+    })
+    const deletePath = filePathFromCtx(ctx)
+    if (deletePath) {
+        actions.push({
+            id: 'files.delete',
+            title: 'Delete',
+            group: 'files-destructive',
+            icon: <Trash2Icon />,
+            danger: true,
+            run: () => onDelete(deletePath),
+        })
+    }
+    return actions
 }
 
 function TreeWithMenus({
@@ -250,70 +271,6 @@ function filePathFromCtx(ctx: CtxMenuState): string | null {
     if (ctx.node.id.startsWith('pending:')) return null
     return ctx.node.id
 }
-
-function ContextMenu(props: {
-    state: CtxMenuState
-    onOpenChange: (open: boolean) => void
-    onNewFile: () => void
-    onDelete: () => void
-}) {
-    if (!props.state.open) return null
-    return <ContextMenuInner {...props} state={props.state} />
-}
-
-function ContextMenuInner({
-    state,
-    onOpenChange,
-    onNewFile,
-    onDelete,
-}: {
-    state: Extract<CtxMenuState, { open: true }>
-    onOpenChange: (open: boolean) => void
-    onNewFile: () => void
-    onDelete: () => void
-}) {
-    const isFile = state.node?.type === 'file'
-    const isPendingFile = isFile && state.node!.id.startsWith('pending:')
-    // VirtualElement form keeps the anchor coords pure data — base-ui calls
-    // `getBoundingClientRect()` synchronously each frame, so the menu lines up
-    // at the click point from the first paint (a real DOM element initialized
-    // at (0,0) then moved in useEffect would briefly render top-left).
-    const anchor = useMemo<MenuVirtualElement>(
-        () => ({
-            getBoundingClientRect: () =>
-                ({
-                    x: state.x,
-                    y: state.y,
-                    left: state.x,
-                    top: state.y,
-                    right: state.x,
-                    bottom: state.y,
-                    width: 0,
-                    height: 0,
-                    toJSON() {
-                        return undefined
-                    },
-                }) as DOMRect,
-        }),
-        [state.x, state.y],
-    )
-    return (
-        <DropdownMenu open onOpenChange={onOpenChange}>
-            <DropdownMenuPortal>
-                <DropdownMenuContent anchor={anchor} side='bottom' align='start' className='w-44'>
-                    <DropdownMenuItem onClick={onNewFile}>New file…</DropdownMenuItem>
-                    {isFile && !isPendingFile ? (
-                        <DropdownMenuItem variant='destructive' onClick={onDelete}>
-                            Delete
-                        </DropdownMenuItem>
-                    ) : null}
-                </DropdownMenuContent>
-            </DropdownMenuPortal>
-        </DropdownMenu>
-    )
-}
-
-type MenuVirtualElement = { getBoundingClientRect: () => DOMRect }
 
 function NewFileInput({
     onConfirm,

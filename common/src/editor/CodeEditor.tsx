@@ -22,7 +22,8 @@ import { drawSelection, EditorView, keymap } from '@codemirror/view'
 
 import { cn } from '@hollowcube/design-system'
 
-import { EditorContextMenu, type EditorContextMenuCommands } from './components/EditorContextMenu'
+import { ActionContextMenu } from '../project/actions/ActionContextMenu'
+import { type Action } from '../project/actions/types'
 import { UsagesPopup, type UsageMatch } from './components/UsagesPopup'
 import { activeLineHighlight } from './extensions/activeLine'
 import {
@@ -509,101 +510,136 @@ function CodeEditor({
         })
     }, [effectiveHighlightRanges])
 
-    const commands: EditorContextMenuCommands = React.useMemo(
-        () => ({
-            token: ctxMenu.token,
-            onCut: async () => {
-                const view = viewRef.current
-                if (!view) return
-                const sel = view.state.selection.main
-                if (sel.empty) return
-                const text = view.state.doc.sliceString(sel.from, sel.to)
-                try {
-                    await navigator.clipboard.writeText(text)
-                } catch {
-                    /* ignore */
-                }
-                view.dispatch({ changes: { from: sel.from, to: sel.to, insert: '' } })
-            },
-            onCopy: async () => {
-                const view = viewRef.current
-                if (!view) return
-                const sel = view.state.selection.main
-                if (sel.empty) return
-                try {
-                    await navigator.clipboard.writeText(
-                        view.state.doc.sliceString(sel.from, sel.to),
-                    )
-                } catch {
-                    /* ignore */
-                }
-            },
-            onPaste: async () => {
-                const view = viewRef.current
-                if (!view) return
-                let text = ''
-                try {
-                    text = await navigator.clipboard.readText()
-                } catch {
-                    return
-                }
-                if (!text) return
-                const sel = view.state.selection.main
-                view.dispatch({
-                    changes: { from: sel.from, to: sel.to, insert: text },
-                    selection: { anchor: sel.from + text.length },
+    const contextActions: Action[] = React.useMemo(() => {
+        const cutAction = async () => {
+            const view = viewRef.current
+            if (!view) return
+            const sel = view.state.selection.main
+            if (sel.empty) return
+            const text = view.state.doc.sliceString(sel.from, sel.to)
+            try {
+                await navigator.clipboard.writeText(text)
+            } catch {
+                /* ignore */
+            }
+            view.dispatch({ changes: { from: sel.from, to: sel.to, insert: '' } })
+        }
+        const copyAction = async () => {
+            const view = viewRef.current
+            if (!view) return
+            const sel = view.state.selection.main
+            if (sel.empty) return
+            try {
+                await navigator.clipboard.writeText(
+                    view.state.doc.sliceString(sel.from, sel.to),
+                )
+            } catch {
+                /* ignore */
+            }
+        }
+        const pasteAction = async () => {
+            const view = viewRef.current
+            if (!view) return
+            let text = ''
+            try {
+                text = await navigator.clipboard.readText()
+            } catch {
+                return
+            }
+            if (!text) return
+            const sel = view.state.selection.main
+            view.dispatch({
+                changes: { from: sel.from, to: sel.to, insert: text },
+                selection: { anchor: sel.from + text.length },
+            })
+        }
+        const findUsages = () => {
+            if (ctxMenu.token && ctxMenu.tokenFrom !== null && ctxMenu.tokenTo !== null) {
+                openUsages(ctxMenu.token, ctxMenu.tokenFrom, {
+                    from: ctxMenu.tokenFrom,
+                    to: ctxMenu.tokenTo,
                 })
+            }
+        }
+        const goToDefinition = () => {
+            setFlashMsg('No definition available (mock — LSP not wired)')
+        }
+        const format = () => {
+            const view = viewRef.current
+            if (!view) return
+            const doc = view.state.doc.toString()
+            try {
+                const parsed = JSON.parse(doc) as unknown
+                const formatted = JSON.stringify(parsed, null, 4)
+                view.dispatch({ changes: { from: 0, to: doc.length, insert: formatted } })
+            } catch {
+                setFlashMsg('Format failed: invalid JSON')
+            }
+        }
+        const doFoldAll = () => {
+            const view = viewRef.current
+            if (view) foldAll(view)
+        }
+        const doUnfoldAll = () => {
+            const view = viewRef.current
+            if (view) unfoldAll(view)
+        }
+        const findInFile = () => {
+            const view = viewRef.current
+            if (view) openSearchPanel(view)
+        }
+        const findUsagesTitle = ctxMenu.token
+            ? `Find usages of "${ctxMenu.token}"`
+            : 'Find usages'
+        return [
+            { id: 'editor.cut', title: 'Cut', group: 'clipboard', keybinding: '$mod+x', run: () => void cutAction() },
+            { id: 'editor.copy', title: 'Copy', group: 'clipboard', keybinding: '$mod+c', run: () => void copyAction() },
+            { id: 'editor.paste', title: 'Paste', group: 'clipboard', keybinding: '$mod+v', run: () => void pasteAction() },
+            {
+                id: 'editor.findUsages',
+                title: findUsagesTitle,
+                group: 'navigation',
+                keybinding: 'f7',
+                disabled: !ctxMenu.token,
+                run: findUsages,
             },
-            onFindUsages: () => {
-                if (ctxMenu.token && ctxMenu.tokenFrom !== null && ctxMenu.tokenTo !== null) {
-                    openUsages(ctxMenu.token, ctxMenu.tokenFrom, {
-                        from: ctxMenu.tokenFrom,
-                        to: ctxMenu.tokenTo,
-                    })
-                }
+            {
+                id: 'editor.goToDefinition',
+                title: 'Go to definition',
+                group: 'navigation',
+                keybinding: 'f12',
+                run: goToDefinition,
             },
-            onGoToDefinition: () => {
-                setFlashMsg('No definition available (mock — LSP not wired)')
+            {
+                id: 'editor.format',
+                title: 'Format document',
+                group: 'edit',
+                keybinding: 'alt+shift+f',
+                run: format,
             },
-            onFormat: () => {
-                const view = viewRef.current
-                if (!view) return
-                const doc = view.state.doc.toString()
-                try {
-                    const parsed = JSON.parse(doc) as unknown
-                    const formatted = JSON.stringify(parsed, null, 4)
-                    view.dispatch({ changes: { from: 0, to: doc.length, insert: formatted } })
-                } catch {
-                    setFlashMsg('Format failed: invalid JSON')
-                }
+            { id: 'editor.foldAll', title: 'Fold all', group: 'edit', run: doFoldAll },
+            { id: 'editor.unfoldAll', title: 'Unfold all', group: 'edit', run: doUnfoldAll },
+            {
+                id: 'editor.findInFile',
+                title: 'Find in file',
+                group: 'find',
+                keybinding: '$mod+f',
+                run: findInFile,
             },
-            onFoldAll: () => {
-                const view = viewRef.current
-                if (view) foldAll(view)
-            },
-            onUnfoldAll: () => {
-                const view = viewRef.current
-                if (view) unfoldAll(view)
-            },
-            onFindInFile: () => {
-                const view = viewRef.current
-                if (view) openSearchPanel(view)
-            },
-        }),
-        [ctxMenu.token, ctxMenu.tokenFrom, ctxMenu.tokenTo, openUsages],
-    )
+        ]
+    }, [ctxMenu.token, ctxMenu.tokenFrom, ctxMenu.tokenTo, openUsages])
 
     return (
         <div className={cn('relative h-full w-full overflow-hidden px-2', className)}>
             <div ref={hostRef} className='h-full w-full' />
             {enableInteractions ? (
                 <>
-                    <EditorContextMenu
+                    <ActionContextMenu
                         open={ctxMenu.open}
                         onOpenChange={(open) => setCtxMenu((s) => ({ ...s, open }))}
                         x={ctxMenu.x}
                         y={ctxMenu.y}
-                        commands={commands}
+                        actions={contextActions}
                     />
                     {usages.open ? (
                         <UsagesPopup

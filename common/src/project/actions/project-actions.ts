@@ -9,6 +9,7 @@ import {
     type Tab,
     type WorkspaceStore,
 } from '../../workspace'
+import { type WorkspaceStoreHook } from '../../workspace/context'
 import { type AnyEditorDefinition, type ToolDefinition } from '../registry'
 import { useEditors, useTools } from '../registry-context'
 
@@ -44,8 +45,17 @@ export type ProjectActions = {
     openTool: (toolKind: string, opts?: { dock?: DockId }) => void
 }
 
+/** Hook form: reads the workspace store + tools/editors from context. Must be
+ *  used inside `<Workspace>`. */
 export function useProjectActions(): ProjectActions {
     const { useStore } = useWorkspaceContext()
+    return useProjectActionsForStore(useStore)
+}
+
+/** Hook variant for callers that hold the store hook directly (siblings of
+ *  `<Workspace>`, e.g. the search popup). Tools/editors still come from the
+ *  RegistryProvider, which sits outside of `<Workspace>`. */
+export function useProjectActionsForStore(useStore: WorkspaceStoreHook): ProjectActions {
     const tools = useTools()
     const editors = useEditors()
 

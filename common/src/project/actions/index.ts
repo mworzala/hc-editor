@@ -24,6 +24,7 @@ export {
 // space: "things the host can do for you."
 export {
     useProjectActions,
+    useProjectActionsForStore,
     type OpenEditorArgs,
     type OpenEditorTarget,
     type ProjectActions,

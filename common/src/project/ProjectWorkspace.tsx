@@ -35,6 +35,7 @@ import { createInitialWorkspaceState } from './initial-state'
 import { ProjectTopBar } from './ProjectTopBar'
 import { type AnyEditorDefinition, type ToolDefinition } from './registry'
 import { RegistryProvider, useTabRegistry, useTools } from './registry-context'
+import { SearchActions, SearchPopup } from './search'
 import { filesTool } from './tools/files'
 
 // The project id stays hardcoded until `/:projectId` routing lands. The
@@ -136,6 +137,7 @@ function ProjectWorkspaceInner() {
             <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
                 <NewFileAction useStore={useStore} />
                 <CloseFocusedTabAction useStore={useStore} />
+                <SearchActions />
                 <ActionHotkeyBridge />
                 <ProjectTopBar useStore={useStore} />
                 <div className='min-h-0 flex-1'>
@@ -148,6 +150,7 @@ function ProjectWorkspaceInner() {
                     />
                 </div>
                 {tabContextMenu.node}
+                <SearchPopup useStore={useStore} />
             </div>
         </ActionContextProvider>
     )

@@ -134,6 +134,13 @@ function DialogDescription({ className, ...props }: DialogPrimitive.Description.
     )
 }
 
+// Raw popup primitive (base-ui Dialog.Popup, untyped wrapper-free) so
+// consumers can compose dialogs with custom positioning without re-implementing
+// focus trap / ESC / outside-click. Most consumers should prefer DialogContent;
+// the search popup uses this directly because its top-center anchor doesn't
+// match DialogContent's hardcoded centered styling.
+const DialogPopup = DialogPrimitive.Popup
+
 export {
     Dialog,
     DialogClose,
@@ -142,6 +149,7 @@ export {
     DialogFooter,
     DialogHeader,
     DialogOverlay,
+    DialogPopup,
     DialogPortal,
     DialogTitle,
     DialogTrigger,

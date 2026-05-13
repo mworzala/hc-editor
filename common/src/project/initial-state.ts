@@ -8,6 +8,7 @@ import { FILES_TOOL_KIND } from './tools/files'
 export function createInitialWorkspaceState(): WorkspaceState {
     const filesTabId = makeId('tab')
     const welcomeTabId = makeId('tab')
+    const centerLeafId = makeId('leaf')
     return {
         columnSizes: [22, 78, 0],
         middleSizes: [100, 0],
@@ -20,9 +21,10 @@ export function createInitialWorkspaceState(): WorkspaceState {
         bottom: { tabs: [], activeId: null },
         center: {
             kind: 'leaf',
-            id: makeId('leaf'),
+            id: centerLeafId,
             tabs: [{ id: welcomeTabId, kind: WELCOME_EDITOR_KIND, title: 'Welcome' }],
             activeId: welcomeTabId,
         },
+        focusedLeafId: centerLeafId,
     }
 }

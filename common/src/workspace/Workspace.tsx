@@ -15,33 +15,42 @@ import {
 import { cn } from '@hollowcube/design-system'
 
 import { TOGGLE_ANIM_MS } from './constants'
-import { WorkspaceProvider, useWorkspaceContext } from './context'
-import { readDragData, type DragSide } from './drag-data'
+import { WorkspaceProvider, useWorkspaceContext, type WorkspaceStoreHook } from './context'
+import { readDragData } from './drag-data'
 import { EditorGroup } from './EditorGroup'
 import { ResizeHandle } from './ResizeHandle'
-import { findLeaf, selectTabLocations, type TabLocation, type WorkspaceStore } from './store'
+import { findLeaf, selectTabLocations, type WorkspaceStore } from './store'
 import { ToolDock } from './ToolDock'
-import { type DockId, type Tab, type TabRegistry } from './types'
+import { type DockId, type DragSide, type Tab, type TabRegistry } from './types'
 
 type WorkspaceProps = {
-    useStore: () => WorkspaceStore
+    useStore: WorkspaceStoreHook
     tabRegistry: TabRegistry
     /** Render inside a tool dock that has no tabs. Used by hosts to surface a
      *  "drag a tool here" empty state. If omitted a minimal placeholder is shown. */
     renderEmpty?: (dockId: DockId) => React.ReactNode
+    /** Render at the end of a tool dock's tab bar when it has tabs. Used by
+     *  hosts to surface an "add tab" affordance. */
+    renderToolDockAdd?: (dockId: DockId) => React.ReactNode
+    /** Fires when the user right-clicks a tab. The host owns the menu. */
+    onTabContextMenu?: (info: { paneId: string; tabId: string; x: number; y: number }) => void
     className?: string
 }
 
-type ActiveDrag = {
-    tab: Tab
-    sourcePaneId: string
-    sourceKind: 'tool' | 'editor'
-    sourceLocator: TabLocation
-}
-
-export function Workspace({ useStore, tabRegistry, renderEmpty, className }: WorkspaceProps) {
+export function Workspace({
+    useStore,
+    tabRegistry,
+    renderEmpty,
+    renderToolDockAdd,
+    onTabContextMenu,
+    className,
+}: WorkspaceProps) {
+    const ctxValue = React.useMemo(
+        () => ({ useStore, tabRegistry, renderEmpty, renderToolDockAdd, onTabContextMenu }),
+        [useStore, tabRegistry, renderEmpty, renderToolDockAdd, onTabContextMenu],
+    )
     return (
-        <WorkspaceProvider value={{ useStore, tabRegistry, renderEmpty }}>
+        <WorkspaceProvider value={ctxValue}>
             <WorkspaceInner className={className} />
         </WorkspaceProvider>
     )
@@ -50,11 +59,10 @@ export function Workspace({ useStore, tabRegistry, renderEmpty, className }: Wor
 function WorkspaceInner({ className }: { className?: string }) {
     const { useStore } = useWorkspaceContext()
     const state = useStore()
-    const [activeDrag, setActiveDrag] = React.useState<ActiveDrag | null>(null)
-    // Pane id currently under the dragged tab. "tool:left", "editor:<leafId>"
-    // — derived from the dnd-kit over target so the ring shows for the OWNING
-    // pane no matter which interior droppable (tab, content, body) is hovered.
-    const [hoveredPaneId, setHoveredPaneId] = React.useState<string | null>(null)
+    // Drag state lives on the store now (see store.activeDrag / hoveredPaneId).
+    // We read it back so existing layout components keep their shape.
+    const activeDrag = state.activeDrag
+    const hoveredPaneId = state.hoveredPaneId
 
     const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }))
 
@@ -91,7 +99,7 @@ function WorkspaceInner({ className }: { className?: string }) {
         if (!locator) return
         const tab = lookupTab(state, locator, data.tabId)
         if (!tab) return
-        setActiveDrag({
+        state.setActiveDrag({
             tab,
             sourcePaneId: data.paneId,
             sourceKind: locator.kind === 'tool' ? 'tool' : 'editor',
@@ -100,37 +108,39 @@ function WorkspaceInner({ className }: { className?: string }) {
     }
 
     const onDragCancel = () => {
-        setActiveDrag(null)
-        setHoveredPaneId(null)
+        state.setActiveDrag(null)
+        state.setHoveredPaneId(null)
     }
 
     const onDragOver = (event: DragOverEvent) => {
         if (!event.over) {
-            setHoveredPaneId(null)
+            state.setHoveredPaneId(null)
             return
         }
         const overData = readDragData(event.over)
         if (overData?.kind === 'tab') {
             const loc = tabLocations.get(overData.tabId)
             if (!loc) return
-            setHoveredPaneId(loc.kind === 'tool' ? `tool:${loc.dock}` : `editor:${loc.leafId}`)
+            state.setHoveredPaneId(
+                loc.kind === 'tool' ? `tool:${loc.dock}` : `editor:${loc.leafId}`,
+            )
             return
         }
         if (overData?.kind === 'tool-dock') {
-            setHoveredPaneId(`tool:${overData.dockId}`)
+            state.setHoveredPaneId(`tool:${overData.dockId}`)
             return
         }
         if (overData?.kind === 'editor-leaf' || overData?.kind === 'split-edge') {
-            setHoveredPaneId(`editor:${overData.leafId}`)
+            state.setHoveredPaneId(`editor:${overData.leafId}`)
             return
         }
-        setHoveredPaneId(null)
+        state.setHoveredPaneId(null)
     }
 
     const onDragEnd = (event: DragEndEvent) => {
         const drag = activeDrag
-        setActiveDrag(null)
-        setHoveredPaneId(null)
+        state.setActiveDrag(null)
+        state.setHoveredPaneId(null)
         if (!drag || !event.over) return
         const overData = readDragData(event.over)
         if (!overData) return
@@ -337,12 +347,14 @@ function ShellLayout({ state, activeDragKind, hoveredPaneId }: ShellLayoutProps)
                             node={state.center}
                             activeDragKind={activeDragKind}
                             hoveredPaneId={hoveredPaneId}
+                            focusedLeafId={state.focusedLeafId}
                             onActivate={(leafId, tabId) =>
                                 state.activateTab({ kind: 'editor', leafId }, tabId)
                             }
                             onClose={(leafId, tabId) =>
                                 state.closeTab({ kind: 'editor', leafId }, tabId)
                             }
+                            onFocus={(leafId) => state.setFocusedLeaf(leafId)}
                             onSplitResize={state.setLeafSplitSizes}
                         />
                     </Panel>
@@ -394,10 +406,12 @@ function ShellLayout({ state, activeDragKind, hoveredPaneId }: ShellLayoutProps)
     )
 }
 
-function lookupTab(state: WorkspaceStore, loc: TabLocation, tabId: string): Tab | null {
+function lookupTab(state: WorkspaceStore, loc: TabLocationLite, tabId: string): Tab | null {
     if (loc.kind === 'tool') {
         return state[loc.dock].tabs.find((t) => t.id === tabId) ?? null
     }
     const leaf = findLeaf(state.center, loc.leafId)
     return leaf?.tabs.find((t) => t.id === tabId) ?? null
 }
+
+type TabLocationLite = { kind: 'tool'; dock: DockId } | { kind: 'editor'; leafId: string }

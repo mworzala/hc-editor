@@ -1,12 +1,16 @@
 import { Button } from '@hollowcube/design-system'
 
+import { useProjectActions } from '../actions'
 import { useProject } from '../context'
 import { type EditorDefinition } from '../registry'
+import { API_TEST_EDITOR_KIND } from './api-test'
 
 export const WELCOME_EDITOR_KIND = 'editor:welcome'
 
 function WelcomeTab() {
     const project = useProject()
+    const { openEditor } = useProjectActions()
+
     return (
         <div className='flex h-full items-center justify-center p-6'>
             <div className='flex max-w-md flex-col items-center gap-3 text-center'>
@@ -14,9 +18,18 @@ function WelcomeTab() {
                 <p className='text-muted-foreground text-sm'>
                     Open a file from the file tree to get started.
                 </p>
-                <Button variant='ghost' size='sm'>
-                    Get started
-                </Button>
+                <div className='flex gap-2'>
+                    <Button variant='ghost' size='sm'>
+                        Get started
+                    </Button>
+                    <Button
+                        variant='outline'
+                        size='sm'
+                        onClick={() => openEditor({ kind: API_TEST_EDITOR_KIND })}
+                    >
+                        Open API test
+                    </Button>
+                </div>
             </div>
         </div>
     )

@@ -1,10 +1,8 @@
-import { type DockId } from './types'
+import { type DockId, type DragSide } from './types'
 
 // All drag/drop payloads exchanged with dnd-kit go through this discriminated
 // union. Replaces the four ad-hoc `as { kind?: ... }` casts that used to live
 // at each drag handler — typos now fail at the source.
-
-export type DragSide = 'left' | 'right' | 'top' | 'bottom'
 
 export type DragData =
     | { kind: 'tab'; paneId: string; tabId: string }

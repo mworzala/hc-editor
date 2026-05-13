@@ -18,8 +18,10 @@ type EditorGroupProps = {
      *  hovering, set at the Workspace level so leaves can show the drop ring
      *  regardless of which inner droppable is hit. */
     hoveredPaneId: string | null
+    focusedLeafId: string | null
     onActivate: (leafId: string, tabId: string) => void
     onClose: (leafId: string, tabId: string) => void
+    onFocus: (leafId: string) => void
     onSplitResize: (splitId: string, sizes: [number, number]) => void
 }
 
@@ -69,10 +71,12 @@ function LeafNode({
     node,
     activeDragKind,
     hoveredPaneId,
+    focusedLeafId,
     onActivate,
     onClose,
+    onFocus,
 }: EditorGroupProps & { node: Extract<EditorGroupNode, { kind: 'leaf' }> }) {
-    const { tabRegistry } = useWorkspaceContext()
+    const { tabRegistry, onTabContextMenu } = useWorkspaceContext()
     const paneId = `editor:${node.id}`
 
     const tabsDroppable = useDroppable({
@@ -82,6 +86,7 @@ function LeafNode({
 
     const showEdges = activeDragKind === 'editor'
     const highlightDrop = activeDragKind === 'editor' && hoveredPaneId === paneId
+    const isFocused = focusedLeafId === node.id
 
     const activeTab = node.tabs.find((t) => t.id === node.activeId) ?? node.tabs[0]
     const tabIds = node.tabs.map((t) => t.id)
@@ -95,6 +100,13 @@ function LeafNode({
             )}
             data-slot='workspace-editor-leaf'
             data-leaf-id={node.id}
+            data-focused={isFocused ? 'true' : undefined}
+            // Capture-phase pointerdown so clicks anywhere in the pane focus it
+            // (tabs, content body, gutter). We don't use onClick because some
+            // children stopPropagation.
+            onPointerDownCapture={() => {
+                if (!isFocused) onFocus(node.id)
+            }}
         >
             <SortableContext items={tabIds} strategy={horizontalListSortingStrategy}>
                 <TabBar
@@ -103,6 +115,7 @@ function LeafNode({
                     activeId={node.activeId}
                     onActivate={(id) => onActivate(node.id, id)}
                     onClose={(id) => onClose(node.id, id)}
+                    onContextMenu={onTabContextMenu}
                 />
             </SortableContext>
 

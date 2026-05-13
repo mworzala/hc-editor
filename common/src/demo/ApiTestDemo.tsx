@@ -17,17 +17,23 @@ import {
 } from '@hollowcube/api'
 import { Badge, Button, Input, Label, ScrollArea, Textarea } from '@hollowcube/design-system'
 
-export function ApiTestDemo() {
-    const [baseUrl, setBaseUrl] = useState('http://localhost:8080')
-    const [projectId, setProjectId] = useState('demo')
+import { usePlatform } from '../platform'
 
-    const client = useMemo(() => new HCClient({ baseUrl }), [baseUrl])
+export function ApiTestDemo() {
+    const [baseUrl, setBaseUrl] = useState('/v1')
+    const [projectId, setProjectId] = useState('demo')
+    const platform = usePlatform()
+
+    const client = useMemo(
+        () => new HCClient({ baseUrl, sendUnsafe: platform.apiTransport }),
+        [baseUrl, platform.apiTransport],
+    )
     const queryClient = useMemo(() => new QueryClient(), [])
 
     return (
         <QueryClientProvider client={queryClient}>
             <HCClientProvider client={client}>
-                <div className='flex h-svh w-full flex-col bg-background'>
+                <div className='flex h-full w-full flex-col'>
                     <header className='flex flex-col gap-2 border-b border-border bg-surface px-6 py-3'>
                         <h1 className='text-xl font-medium tracking-tight'>API test</h1>
                         <p className='text-muted-foreground max-w-3xl text-xs'>
@@ -97,7 +103,11 @@ function ConfigPanel({
 // ----------------------------------------------------------------------------
 
 function ProjectPanel({ projectId }: { projectId: string }) {
-    const query = useV1ProjectGet(projectId, { enabled: projectId.length > 0 })
+    const query = useV1ProjectGet(projectId, {
+        enabled: projectId.length > 0,
+        retry: 0,
+    })
+    const queryError = query.error ?? query.failureReason ?? null
 
     return (
         <Card
@@ -121,7 +131,7 @@ function ProjectPanel({ projectId }: { projectId: string }) {
                 <Badge variant='outline'>status: {query.status}</Badge>
                 {query.isFetching ? <Badge>fetching</Badge> : null}
             </div>
-            {query.error ? <ErrorDisplay error={query.error} /> : null}
+            {queryError ? <ErrorDisplay error={queryError} /> : null}
             {query.data ? (
                 <div className='flex flex-col gap-2'>
                     <div className='text-sm'>
@@ -145,6 +155,7 @@ function ProjectPanel({ projectId }: { projectId: string }) {
 
 function FileItem({ projectId, file }: { projectId: string; file: ProjectFile }) {
     const client = useHCClient()
+    const queryClient = useQueryClient()
     const deleteMutation = useV1ProjectFilesDelete()
     const [preview, setPreview] = useState<string | null>(null)
     const [busy, setBusy] = useState(false)
@@ -170,7 +181,15 @@ function FileItem({ projectId, file }: { projectId: string; file: ProjectFile })
 
     const handleDelete = () => {
         setError(null)
-        deleteMutation.mutate({ projectId, path: file.path }, { onError: setError })
+        deleteMutation.mutate(
+            { projectId, path: file.path },
+            {
+                onSuccess: () => {
+                    void queryClient.invalidateQueries({ queryKey: v1ProjectGetKey(projectId) })
+                },
+                onError: setError,
+            },
+        )
     }
 
     return (
@@ -211,6 +230,7 @@ function UploadPanel({ projectId }: { projectId: string }) {
     const [body, setBody] = useState('hello world\n')
     const [result, setResult] = useState<ProjectFile | null>(null)
     const [error, setError] = useState<unknown>(null)
+    const queryClient = useQueryClient()
     const mutation = useV1ProjectFilesUpdate()
 
     const handleUpload = () => {
@@ -218,7 +238,10 @@ function UploadPanel({ projectId }: { projectId: string }) {
         mutation.mutate(
             { projectId, path, body, contentType },
             {
-                onSuccess: (file) => setResult(file),
+                onSuccess: (file) => {
+                    setResult(file)
+                    void queryClient.invalidateQueries({ queryKey: v1ProjectGetKey(projectId) })
+                },
                 onError: setError,
             },
         )
@@ -390,15 +413,24 @@ function Code({ children }: { children: React.ReactNode }) {
 }
 
 function ErrorDisplay({ error }: { error: unknown }) {
-    const message =
-        error instanceof ApiError
-            ? `ApiError ${error.status}: ${error.message}`
-            : error instanceof Error
-              ? error.message
-              : String(error)
+    const lines: string[] = []
+    if (error instanceof ApiError) {
+        lines.push(`ApiError ${error.status}: ${error.message}`)
+        if (error.method !== undefined && error.url !== undefined) {
+            lines.push(`${error.method} ${error.url}`)
+        }
+        const cause = (error as Error & { cause?: unknown }).cause
+        if (cause instanceof Error && cause.message !== error.message) {
+            lines.push(`cause: ${cause.name}: ${cause.message}`)
+        }
+    } else if (error instanceof Error) {
+        lines.push(`${error.name}: ${error.message}`)
+    } else {
+        lines.push(String(error))
+    }
     return (
-        <div className='mt-2 rounded-sm border border-destructive bg-destructive/10 px-2 py-1 text-xs text-destructive'>
-            {message}
+        <div className='text-destructive border-destructive bg-destructive/10 mt-2 rounded-sm border px-2 py-1 font-mono text-xs whitespace-pre-wrap'>
+            {lines.join('\n')}
         </div>
     )
 }

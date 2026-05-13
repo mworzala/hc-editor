@@ -11,4 +11,15 @@ export default defineConfig({
             '@': path.resolve(__dirname, './src'),
         },
     },
+    server: {
+        proxy: {
+            // Forward API calls to the local Go server so the browser sees them
+            // as same-origin and CORS doesn't apply. SSE needs the stream not
+            // to be buffered.
+            '/v1': {
+                target: 'http://localhost:9127',
+                changeOrigin: true,
+            },
+        },
+    },
 })

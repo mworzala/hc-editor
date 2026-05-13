@@ -26,7 +26,7 @@ export function ToolDock({
     onActivate,
     onClose,
 }: ToolDockProps) {
-    const { tabRegistry, renderEmpty } = useWorkspaceContext()
+    const { tabRegistry, renderEmpty, renderToolDockAdd, onTabContextMenu } = useWorkspaceContext()
     const paneId = `tool:${dockId}`
     const { setNodeRef } = useDroppable({
         id: paneId,
@@ -55,6 +55,8 @@ export function ToolDock({
                         activeId={state.activeId}
                         onActivate={onActivate}
                         onClose={onClose}
+                        onContextMenu={onTabContextMenu}
+                        trailing={renderToolDockAdd?.(dockId)}
                     />
                 </SortableContext>
             )}

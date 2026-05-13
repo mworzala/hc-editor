@@ -1,0 +1,97 @@
+import { type ProjectFile } from '@hollowcube/api'
+import { type FileTreeNode } from '@hollowcube/design-system'
+
+import { type PendingFile } from '../data/pending-files'
+
+// Build a hierarchical FileTreeNode list from a flat ProjectFile array, with
+// optional pending entries merged in. Pending entries with a path appear like
+// real files; pending entries without a path (purely untitled) are ignored
+// here — they live only as tabs, not as tree rows.
+//
+// Node ids:
+//
+//   • Saved files use the full path as id (so click handlers can pass the id
+//     straight into `openEditor({ payload: { path: id } })`).
+//   • Folder ids are the folder's full path (e.g. `src/utils`).
+//   • Pending file ids use `pending:<tempId>` so the click handler can
+//     distinguish them and route via the pending store.
+//
+// Sorting: folders first, then files; both alphabetical within their group.
+
+type BuilderEntry =
+    | { kind: 'file'; segments: string[]; id: string; contentType?: string; pending?: boolean }
+    | never
+
+export function buildFileTree(
+    files: readonly ProjectFile[],
+    pending: readonly PendingFile[] = [],
+): FileTreeNode[] {
+    const entries: BuilderEntry[] = []
+    for (const f of files) {
+        const segments = splitPath(f.path)
+        if (segments.length === 0) continue
+        entries.push({ kind: 'file', segments, id: f.path, contentType: f.contentType })
+    }
+    for (const p of pending) {
+        if (!p.path) continue
+        const segments = splitPath(p.path)
+        if (segments.length === 0) continue
+        entries.push({ kind: 'file', segments, id: `pending:${p.tempId}`, pending: true })
+    }
+
+    return assemble(entries, '')
+}
+
+function assemble(entries: BuilderEntry[], folderPath: string): FileTreeNode[] {
+    const folderMap = new Map<string, BuilderEntry[]>()
+    const files: FileTreeNode[] = []
+
+    for (const entry of entries) {
+        const [head, ...rest] = entry.segments
+        if (!head) continue
+        if (rest.length === 0) {
+            files.push({
+                type: 'file',
+                id: entry.id,
+                name: head,
+            })
+            continue
+        }
+        const list = folderMap.get(head) ?? []
+        list.push({ ...entry, segments: rest })
+        folderMap.set(head, list)
+    }
+
+    const folders: FileTreeNode[] = []
+    for (const [name, childEntries] of folderMap) {
+        const childPath = folderPath ? `${folderPath}/${name}` : name
+        folders.push({
+            type: 'folder',
+            id: childPath,
+            name,
+            children: assemble(childEntries, childPath),
+            defaultOpen: true,
+        })
+    }
+
+    folders.sort(byName)
+    files.sort(byName)
+    return [...folders, ...files]
+}
+
+function byName(a: FileTreeNode, b: FileTreeNode): number {
+    return a.name.localeCompare(b.name)
+}
+
+function splitPath(path: string): string[] {
+    return path.split('/').filter((s) => s.length > 0)
+}
+
+/** Decide whether a file is openable as text. Content types matched verbatim:
+ *  anything starting with `text/`, plus `application/json`. */
+export function isTextContentType(contentType: string | undefined): boolean {
+    if (!contentType) return false
+    if (contentType.startsWith('text/')) return true
+    if (contentType === 'application/json') return true
+    return false
+}

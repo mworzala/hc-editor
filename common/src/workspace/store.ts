@@ -3,7 +3,14 @@ import { create, type StoreApi, type UseBoundStore } from 'zustand'
 import { type Storage } from '@hollowcube/common/platform'
 
 import { DEFAULT_SPLIT_BIAS } from './constants'
-import { type DockId, type EditorGroupNode, type Tab, type WorkspaceState } from './types'
+import { runMigrations, STORAGE_VERSION } from './migrations'
+import {
+    type ActiveDragState,
+    type DockId,
+    type EditorGroupNode,
+    type Tab,
+    type WorkspaceState,
+} from './types'
 
 type Actions = {
     // Layout sizing
@@ -12,8 +19,13 @@ type Actions = {
     setLeafSplitSizes: (splitId: string, sizes: [number, number]) => void
 
     // Tab membership
+    addTab: (location: TabLocation, tab: Tab) => void
     activateTab: (location: TabLocation, tabId: string) => void
     closeTab: (location: TabLocation, tabId: string) => void
+    /** Patch a tab in place. Used when a host needs to change a tab's payload
+     *  or title without churning its identity (e.g. saving an untitled file
+     *  promotes its payload from `{ tempId }` to `{ path }`). */
+    updateTab: (tabId: string, patch: Partial<Omit<Tab, 'id'>>) => void
     reorderTabs: (location: TabLocation, fromIdx: number, toIdx: number) => void
     moveTab: (from: TabLocation, to: TabLocation, tabId: string, targetIndex: number) => void
     /** Split a leaf into a new sibling, placing the tab on `side`. */
@@ -28,21 +40,43 @@ type Actions = {
     toggleDock: (dock: DockId) => void
     setDockVisible: (dock: DockId, visible: boolean) => void
 
+    // Focus
+    setFocusedLeaf: (leafId: string | null) => void
+
+    // Transient drag state (lifted from React local state so debug overlays /
+    // collaborative cursors can read it). Not persisted.
+    setActiveDrag: (drag: ActiveDragState | null) => void
+    setHoveredPaneId: (paneId: string | null) => void
+
     // Persistence helpers
     reset: () => void
 }
 
 export type TabLocation = { kind: 'tool'; dock: DockId } | { kind: 'editor'; leafId: string }
 
-export type WorkspaceStore = WorkspaceState & Actions
+type Transient = {
+    activeDrag: ActiveDragState | null
+    hoveredPaneId: string | null
+}
+
+export type WorkspaceStore = WorkspaceState & Transient & Actions
 
 type CreateOpts = {
     storageKey: string
     initialState: WorkspaceState
     storage: Storage
+    /** Debounce window (ms) for writes back to storage. Defaults to 75ms. Set
+     *  to 0 to write synchronously (useful for tests). */
+    persistDebounceMs?: number
+    /** Optional guard invoked before a `closeTab` runs. Return `false` (or a
+     *  promise resolving to `false`) to veto the close — the store leaves the
+     *  tab in place and the caller is responsible for issuing the close again
+     *  once the guard's prerequisites are met. Used by the project shell to
+     *  auto-save dirty editor tabs (and to prompt for a path on untitled tabs)
+     *  before they're removed. */
+    beforeCloseTab?: (tab: Tab, loc: TabLocation) => boolean | Promise<boolean>
 }
 
-const STORAGE_VERSION = 2
 type Persisted = { version: number; state: WorkspaceState }
 
 function readPersisted(storage: Storage, key: string): WorkspaceState | null {
@@ -50,8 +84,7 @@ function readPersisted(storage: Storage, key: string): WorkspaceState | null {
     if (!raw) return null
     try {
         const parsed = JSON.parse(raw) as Persisted
-        if (parsed.version !== STORAGE_VERSION) return null
-        return parsed.state
+        return runMigrations(parsed)
     } catch {
         return null
     }
@@ -62,19 +95,45 @@ function writePersisted(storage: Storage, key: string, state: WorkspaceState) {
     storage.set(key, JSON.stringify(payload))
 }
 
+/** Trailing-edge debouncer. The store's hot fields (resize sizes) tick on every
+ *  pointermove during a drag; without this we serialize the entire workspace
+ *  ~60 times per second. */
+function debounced<Args extends unknown[]>(
+    fn: (...args: Args) => void,
+    wait: number,
+): (...args: Args) => void {
+    if (wait <= 0) return fn
+    let timer: ReturnType<typeof setTimeout> | null = null
+    let lastArgs: Args | null = null
+    return (...args: Args) => {
+        lastArgs = args
+        if (timer) clearTimeout(timer)
+        timer = setTimeout(() => {
+            timer = null
+            if (lastArgs) fn(...lastArgs)
+        }, wait)
+    }
+}
+
 export function createWorkspaceStore(opts: CreateOpts): UseBoundStore<StoreApi<WorkspaceStore>> {
     const restored = readPersisted(opts.storage, opts.storageKey)
     const initial = restored ?? opts.initialState
 
     return create<WorkspaceStore>()((set, get) => {
+        const debouncedWrite = debounced(
+            (state: WorkspaceState) => writePersisted(opts.storage, opts.storageKey, state),
+            opts.persistDebounceMs ?? 75,
+        )
+
         const persist = () => {
-            const { reset: _r, ...state } = get()
-            void _r
-            writePersisted(opts.storage, opts.storageKey, state as WorkspaceState)
+            const s = get()
+            debouncedWrite(snapshotPersistable(s))
         }
 
         return {
             ...initial,
+            activeDrag: null,
+            hoveredPaneId: null,
 
             setColumnSizes: (sizes) => {
                 set({ columnSizes: sizes })
@@ -89,24 +148,76 @@ export function createWorkspaceStore(opts: CreateOpts): UseBoundStore<StoreApi<W
                 persist()
             },
 
+            addTab: (loc, tab) => {
+                set((s) => {
+                    const next = updateDockOrLeaf(s, loc, (d) => ({
+                        ...d,
+                        tabs: [...d.tabs, tab],
+                        activeId: tab.id,
+                    }))
+                    if (loc.kind === 'editor') {
+                        return { ...next, focusedLeafId: loc.leafId }
+                    }
+                    return next
+                })
+                persist()
+            },
+
             activateTab: (loc, tabId) => {
-                set((s) => updateDockOrLeaf(s, loc, (d) => ({ ...d, activeId: tabId })))
+                set((s) => {
+                    const next = updateDockOrLeaf(s, loc, (d) => ({ ...d, activeId: tabId }))
+                    if (loc.kind === 'editor') {
+                        return { ...next, focusedLeafId: loc.leafId }
+                    }
+                    return next
+                })
                 persist()
             },
 
             closeTab: (loc, tabId) => {
-                set((s) => {
-                    const next = updateDockOrLeaf(s, loc, (d) => {
-                        const tabs = d.tabs.filter((t) => t.id !== tabId)
-                        const activeId =
-                            d.activeId === tabId
-                                ? (tabs[Math.max(0, d.tabs.findIndex((t) => t.id === tabId) - 1)]
-                                      ?.id ?? null)
-                                : d.activeId
-                        return { ...d, tabs, activeId }
+                const guard = opts.beforeCloseTab
+                const doClose = () => {
+                    set((s) => {
+                        const next = updateDockOrLeaf(s, loc, (d) => {
+                            const tabs = d.tabs.filter((t) => t.id !== tabId)
+                            const activeId =
+                                d.activeId === tabId
+                                    ? (tabs[
+                                          Math.max(0, d.tabs.findIndex((t) => t.id === tabId) - 1)
+                                      ]?.id ?? null)
+                                    : d.activeId
+                            return { ...d, tabs, activeId }
+                        })
+                        if (loc.kind !== 'editor') return next
+                        const pruned = pruneEmptyLeaves(next)
+                        return rebindFocusIfMissing(pruned)
                     })
-                    return loc.kind === 'editor' ? pruneEmptyLeaves(next) : next
+                    persist()
+                }
+                if (!guard) {
+                    doClose()
+                    return
+                }
+                // Look up the tab snapshot before close so the guard can read
+                // its kind / payload.
+                const tab = findTabInState(get(), tabId)
+                if (!tab) {
+                    doClose()
+                    return
+                }
+                const result = guard(tab, loc)
+                if (typeof result === 'boolean') {
+                    if (result) doClose()
+                    return
+                }
+                void result.then((ok) => {
+                    if (ok) doClose()
+                    return undefined
                 })
+            },
+
+            updateTab: (tabId, patch) => {
+                set((s) => patchTabEverywhere(s, tabId, patch))
                 persist()
             },
 
@@ -145,7 +256,11 @@ export function createWorkspaceStore(opts: CreateOpts): UseBoundStore<StoreApi<W
                         return { ...d, tabs, activeId: movedTab!.id }
                     })
 
-                    return to.kind === 'editor' ? pruneEmptyLeaves(inserted) : inserted
+                    const finalState =
+                        to.kind === 'editor' ? { ...inserted, focusedLeafId: to.leafId } : inserted
+                    return from.kind === 'editor' || to.kind === 'editor'
+                        ? rebindFocusIfMissing(pruneEmptyLeaves(finalState))
+                        : finalState
                 })
                 persist()
             },
@@ -166,11 +281,15 @@ export function createWorkspaceStore(opts: CreateOpts): UseBoundStore<StoreApi<W
                     })
                     if (!movedTab) return s
 
+                    let newLeafId: string | null = null
                     next = {
                         ...next,
-                        center: splitLeafInTree(next.center, leafId, side, movedTab),
+                        center: splitLeafInTree(next.center, leafId, side, movedTab, (id) => {
+                            newLeafId = id
+                        }),
                     }
-                    return pruneEmptyLeaves(next)
+                    const pruned = rebindFocusIfMissing(pruneEmptyLeaves(next))
+                    return newLeafId ? { ...pruned, focusedLeafId: newLeafId } : pruned
                 })
                 persist()
             },
@@ -186,12 +305,35 @@ export function createWorkspaceStore(opts: CreateOpts): UseBoundStore<StoreApi<W
                 persist()
             },
 
+            setFocusedLeaf: (leafId) => {
+                set({ focusedLeafId: leafId })
+                persist()
+            },
+
+            setActiveDrag: (drag) => set({ activeDrag: drag }),
+            setHoveredPaneId: (paneId) => set({ hoveredPaneId: paneId }),
+
             reset: () => {
                 opts.storage.remove(opts.storageKey)
-                set({ ...opts.initialState })
+                set({ ...opts.initialState, activeDrag: null, hoveredPaneId: null })
             },
         }
     })
+}
+
+/** Strip transient and action fields so the persisted blob holds only
+ *  `WorkspaceState`. */
+function snapshotPersistable(s: WorkspaceStore): WorkspaceState {
+    return {
+        columnSizes: s.columnSizes,
+        middleSizes: s.middleSizes,
+        docksVisible: s.docksVisible,
+        left: s.left,
+        right: s.right,
+        bottom: s.bottom,
+        center: s.center,
+        focusedLeafId: s.focusedLeafId,
+    }
 }
 
 export function clearWorkspaceStorage(storage: Storage, key: string) {
@@ -236,6 +378,23 @@ export function findLeaf(
 ): Extract<EditorGroupNode, { kind: 'leaf' }> | null {
     if (node.kind === 'leaf') return node.id === leafId ? node : null
     return findLeaf(node.children[0], leafId) ?? findLeaf(node.children[1], leafId)
+}
+
+/** Walk the tree and return the first leaf node. */
+export function findFirstLeaf(node: EditorGroupNode): Extract<EditorGroupNode, { kind: 'leaf' }> {
+    if (node.kind === 'leaf') return node
+    return findFirstLeaf(node.children[0])
+}
+
+/** Return the focused leaf if it still exists, else the first leaf in the tree. */
+export function resolveTargetLeaf(
+    state: WorkspaceState,
+): Extract<EditorGroupNode, { kind: 'leaf' }> {
+    if (state.focusedLeafId) {
+        const leaf = findLeaf(state.center, state.focusedLeafId)
+        if (leaf) return leaf
+    }
+    return findFirstLeaf(state.center)
 }
 
 // ---------- pure tree helpers ----------
@@ -292,21 +451,24 @@ function splitLeafInTree(
     leafId: string,
     side: 'left' | 'right' | 'top' | 'bottom',
     tab: Tab,
+    onNewLeaf: (leafId: string) => void,
 ): EditorGroupNode {
     if (node.kind === 'split') {
         return {
             ...node,
             children: [
-                splitLeafInTree(node.children[0], leafId, side, tab),
-                splitLeafInTree(node.children[1], leafId, side, tab),
+                splitLeafInTree(node.children[0], leafId, side, tab, onNewLeaf),
+                splitLeafInTree(node.children[1], leafId, side, tab, onNewLeaf),
             ],
         }
     }
     if (node.id !== leafId) return node
 
+    const newLeafId = makeId('leaf')
+    onNewLeaf(newLeafId)
     const newLeaf: EditorGroupNode = {
         kind: 'leaf',
-        id: makeId('leaf'),
+        id: newLeafId,
         tabs: [tab],
         activeId: tab.id,
     }
@@ -342,6 +504,67 @@ function makeEmptyLeaf(): EditorGroupNode {
     return { kind: 'leaf', id: makeId('leaf'), tabs: [], activeId: null }
 }
 
+/** If `focusedLeafId` no longer points at a real leaf (because it was pruned),
+ *  fall back to the first leaf in the tree. */
+function rebindFocusIfMissing(state: WorkspaceState): WorkspaceState {
+    if (state.focusedLeafId && findLeaf(state.center, state.focusedLeafId)) return state
+    return { ...state, focusedLeafId: findFirstLeaf(state.center).id }
+}
+
 export function makeId(prefix: string): string {
     return `${prefix}-${crypto.randomUUID()}`
+}
+
+function findTabInState(state: WorkspaceState, tabId: string): Tab | null {
+    for (const dock of ['left', 'right', 'bottom'] as const) {
+        const hit = state[dock].tabs.find((t) => t.id === tabId)
+        if (hit) return hit
+    }
+    let found: Tab | null = null
+    walkLeaves(state.center, (leaf) => {
+        if (found) return
+        const hit = leaf.tabs.find((t) => t.id === tabId)
+        if (hit) found = hit
+    })
+    return found
+}
+
+function patchTabEverywhere(
+    state: WorkspaceState,
+    tabId: string,
+    patch: Partial<Omit<Tab, 'id'>>,
+): WorkspaceState {
+    const patchTabs = (tabs: Tab[]): Tab[] => {
+        let touched = false
+        const next = tabs.map((t) => {
+            if (t.id !== tabId) return t
+            touched = true
+            return { ...t, ...patch, id: t.id }
+        })
+        return touched ? next : tabs
+    }
+    const next: WorkspaceState = {
+        ...state,
+        left: { ...state.left, tabs: patchTabs(state.left.tabs) },
+        right: { ...state.right, tabs: patchTabs(state.right.tabs) },
+        bottom: { ...state.bottom, tabs: patchTabs(state.bottom.tabs) },
+        center: mapAllLeaves(state.center, (leaf) => ({
+            ...leaf,
+            tabs: patchTabs(leaf.tabs),
+        })),
+    }
+    return next
+}
+
+function mapAllLeaves(
+    node: EditorGroupNode,
+    update: (
+        leaf: Extract<EditorGroupNode, { kind: 'leaf' }>,
+    ) => Extract<EditorGroupNode, { kind: 'leaf' }>,
+): EditorGroupNode {
+    if (node.kind === 'leaf') return update(node)
+    return {
+        ...node,
+        children: [mapAllLeaves(node.children[0], update), mapAllLeaves(node.children[1], update)],
+    }
 }

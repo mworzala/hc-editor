@@ -21,7 +21,10 @@ export type Tab = {
     /** Display title in the tab strip. */
     title: string
     /** Optional small metadata blob serialized with the layout (e.g. file path,
-     *  doc id). Renderers receive it via `tab.payload`. */
+     *  doc id). Renderers receive it via `tab.payload`.
+     *
+     *  Convention: payload is for *tab identity* (which file? which view of it?)
+     *  — not document content. Use a separate document store for content. */
     payload?: Record<string, unknown>
 }
 
@@ -45,6 +48,18 @@ export type EditorGroupNode =
 
 export type DockId = 'left' | 'right' | 'bottom'
 
+/** Side of a leaf where an edge-drop will drop a tab to form a split. */
+export type DragSide = 'left' | 'right' | 'top' | 'bottom'
+
+/** Snapshot of the in-flight drag. Stored on the workspace store so other UI
+ *  (debug overlays, future collaborative views) can react to it. */
+export type ActiveDragState = {
+    tab: Tab
+    sourcePaneId: string
+    sourceKind: 'tool' | 'editor'
+    sourceLocator: { kind: 'tool'; dock: DockId } | { kind: 'editor'; leafId: string }
+}
+
 export type WorkspaceState = {
     /** Top-level horizontal split sizes (left, middle, right) — sum to 100.
      *  Stored even when a dock is hidden so we restore the right size when
@@ -58,6 +73,10 @@ export type WorkspaceState = {
     right: ToolDockState
     bottom: ToolDockState
     center: EditorGroupNode
+    /** Which editor leaf last received user focus. Used as the default target
+     *  for new editor tabs (command palette → open file, etc.). Set on tab
+     *  activation, on click-into-pane, and on leaf creation via split. */
+    focusedLeafId: string | null
 }
 
 /** Map from `Tab.kind` to a render function. The host supplies one entry per

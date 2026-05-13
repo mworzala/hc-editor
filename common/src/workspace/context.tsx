@@ -1,4 +1,5 @@
 import { createContext, useContext, type ReactNode } from 'react'
+import { type StoreApi, type UseBoundStore } from 'zustand'
 
 import { type WorkspaceStore } from './store'
 import { type DockId, type Tab, type TabRegistry } from './types'
@@ -6,10 +7,17 @@ import { type DockId, type Tab, type TabRegistry } from './types'
 // Removes prop-drilling of `useStore` and `tabRegistry` through Workspace →
 // ShellLayout → EditorGroup/ToolDock → leaf.
 
+export type WorkspaceStoreHook = UseBoundStore<StoreApi<WorkspaceStore>>
+
 type WorkspaceContextValue = {
-    useStore: () => WorkspaceStore
+    useStore: WorkspaceStoreHook
     tabRegistry: TabRegistry
     renderEmpty?: (dockId: DockId) => ReactNode
+    /** Rendered at the end of a tool dock's tab bar (when it has tabs). */
+    renderToolDockAdd?: (dockId: DockId) => ReactNode
+    /** Optional host callback fired on right-click of a tab. The host decides
+     *  what menu to render (workspace primitive stays menu-agnostic). */
+    onTabContextMenu?: (info: { paneId: string; tabId: string; x: number; y: number }) => void
 }
 
 const WorkspaceContext = createContext<WorkspaceContextValue | null>(null)

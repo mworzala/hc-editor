@@ -15,6 +15,7 @@
         "@dnd-kit/sortable": "^10.0.0",
         "@dnd-kit/utilities": "^3.2.2",
         "@generouted/react-router": "^1.20.1",
+        "@hollowcube/api": "workspace:*",
         "@hollowcube/common": "workspace:*",
         "@hollowcube/design-system": "workspace:*",
         "@tanstack/react-hotkeys": "^0.10.0",

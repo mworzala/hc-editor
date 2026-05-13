@@ -1,0 +1,92 @@
+import { type ReactNode } from 'react'
+
+import {
+    selectTabLocations,
+    useWorkspaceContext,
+    type DockId,
+    type Tab,
+    type TabRegistry,
+} from '../workspace'
+import { PaneErrorBoundary } from './error-boundary'
+
+// Two registries sit above the workspace primitive's flat `TabRegistry`:
+//
+//  • ToolDefinition  — singleton, sits in a tool dock (files, search, …).
+//                      Each tool maps to its own `kind`.
+//
+//  • EditorDefinition — multi-instance, keyed by mime type (json, luau, …).
+//                       Multiple editor tabs can exist for the same file
+//                       (e.g. when split).
+//
+// Both registries stay separately addressable via `RegistryProvider`
+// (./registry-context). `buildTabRegistry` exists only as the adapter that
+// hands a flat `Record<kind, render>` to the workspace primitive, which
+// doesn't know about tools vs editors. Each render is wrapped in a
+// PaneErrorBoundary so one crashing tab can't take the workspace down.
+
+export type ToolDefinition = {
+    /** Tab kind. Convention: `tool:<id>`. */
+    kind: string
+    title: string
+    icon: ReactNode
+    /** Which dock the tool opens in if launched without an existing location. */
+    defaultLocation: DockId
+    render: (tab: Tab) => ReactNode
+}
+
+/** Editor for tabs whose payload matches `TPayload`. Payload parsing is the
+ *  registry's job, not each editor's: pass a `parsePayload` (typically a
+ *  `z.parse` call) and the typed value is handed to `titleFor` and `render`.
+ *  Editors that don't need a payload can leave `TPayload` as `void` and skip
+ *  `parsePayload`. */
+export type EditorDefinition<TPayload = unknown> = {
+    /** Tab kind. Convention: `editor:<mime>` or `editor:<synthetic>`. */
+    kind: string
+    /** Mime types this editor handles. Empty for synthetic editors like Welcome. */
+    mimeTypes: readonly string[]
+    /** Validate and narrow the tab's payload. Receives the raw `Tab.payload`
+     *  blob from storage. If omitted, the raw value is passed through as-is. */
+    parsePayload?: (raw: unknown) => TPayload
+    /** Optional title resolver. Receives the parsed payload. */
+    titleFor?: (payload: TPayload) => string
+    render: (ctx: { tab: Tab; payload: TPayload }) => ReactNode
+}
+
+/** Convenience alias for the "I don't care about payload type" use site
+ *  (registry storage, command palette listings, etc.). */
+export type AnyEditorDefinition = EditorDefinition<unknown>
+
+/** Adapter for the underlying workspace primitive. Wraps every editor's render
+ *  with payload parsing + an error boundary so the primitive can stay
+ *  payload-agnostic and a single bad tab won't crash the rest of the app. */
+export function buildTabRegistry(
+    tools: readonly ToolDefinition[],
+    editors: readonly AnyEditorDefinition[],
+): TabRegistry {
+    const registry: Record<string, (tab: Tab) => ReactNode> = {}
+    for (const tool of tools) {
+        registry[tool.kind] = (tab) => <PaneTabWrapper tab={tab}>{tool.render(tab)}</PaneTabWrapper>
+    }
+    for (const editor of editors) {
+        registry[editor.kind] = (tab) => {
+            const payload = editor.parsePayload ? editor.parsePayload(tab.payload) : tab.payload
+            return <PaneTabWrapper tab={tab}>{editor.render({ tab, payload })}</PaneTabWrapper>
+        }
+    }
+    return registry
+}
+
+function PaneTabWrapper({ tab, children }: { tab: Tab; children: ReactNode }) {
+    const { useStore } = useWorkspaceContext()
+    const closeTab = () => {
+        const store = useStore.getState()
+        const loc = selectTabLocations(store).get(tab.id)
+        if (!loc) return
+        store.closeTab(loc, tab.id)
+    }
+    return (
+        <PaneErrorBoundary resetKey={tab.id} onClose={closeTab}>
+            {children}
+        </PaneErrorBoundary>
+    )
+}

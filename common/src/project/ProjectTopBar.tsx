@@ -4,8 +4,10 @@ import { PanelBottomIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon } from 'lu
 import { Button, cn } from '@hollowcube/design-system'
 
 import { usePlatform } from '../platform'
-import { type WorkspaceStore, type DockId } from '../workspace'
+import { type DockId } from '../workspace'
+import { type WorkspaceStoreHook } from '../workspace/context'
 import { useProject } from './context'
+import { ConnectionIndicator } from './data/connection-indicator'
 
 /** Width reserved on macOS for the system traffic-light buttons. */
 const TRAFFIC_LIGHT_RESERVE = 80
@@ -22,7 +24,7 @@ const noDragRegionStyle = {
 } as CSSProperties
 
 type ProjectTopBarProps = {
-    useStore: () => WorkspaceStore
+    useStore: WorkspaceStoreHook
 }
 
 export function ProjectTopBar({ useStore }: ProjectTopBarProps) {
@@ -83,6 +85,7 @@ export function ProjectTopBar({ useStore }: ProjectTopBarProps) {
             </div>
 
             <div className='ml-auto flex items-center gap-1 pr-2'>
+                <ConnectionIndicator desktop={isDesktop} />
                 <Button
                     variant='ghost'
                     size='icon'

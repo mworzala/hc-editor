@@ -67,6 +67,9 @@ export type CodeEditorProps = {
     /** If true, focusing the editor surfaces an onFocus callback the caller
      *  can use to jump the parent editor + close popups. */
     onFocus?: () => void
+    /** Fires when the editor's contentDOM loses focus. Used by the host shell
+     *  to auto-save dirty editor tabs when the user clicks away. */
+    onBlur?: () => void
     /** Set to false for embedded snippets — disables completion, context menu,
      *  usages popup, cmd-hover. Defaults to true for full editors. */
     enableInteractions?: boolean
@@ -106,6 +109,7 @@ function CodeEditor({
     highlightLines,
     scrollToLine,
     onFocus,
+    onBlur,
     enableInteractions = true,
     showActiveLine,
     singleLine = false,
@@ -297,6 +301,16 @@ function CodeEditor({
         view.contentDOM.addEventListener('focus', handler)
         return () => view.contentDOM.removeEventListener('focus', handler)
     }, [onFocus])
+
+    // Surface blur to the parent (used by editor hosts for auto-save on
+    // unfocus). Symmetric with the onFocus plumbing above.
+    React.useEffect(() => {
+        const view = viewRef.current
+        if (!view || !onBlur) return
+        const handler = () => onBlur()
+        view.contentDOM.addEventListener('blur', handler)
+        return () => view.contentDOM.removeEventListener('blur', handler)
+    }, [onBlur])
 
     // Bridge CM6 contextmenu events into React state.
     React.useEffect(() => {

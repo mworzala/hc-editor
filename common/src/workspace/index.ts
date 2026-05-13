@@ -8,11 +8,16 @@ export {
     makeId,
     selectTabLocations,
     findLeaf,
+    findFirstLeaf,
+    resolveTargetLeaf,
     type WorkspaceStore,
     type TabLocation,
 } from './store'
+export { STORAGE_VERSION } from './migrations'
 export type {
+    ActiveDragState,
     DockId,
+    DragSide,
     EditorGroupNode,
     Tab,
     TabKind,
@@ -21,4 +26,5 @@ export type {
     WorkspaceState,
 } from './types'
 export { TOGGLE_ANIM_MS, EDGE_ZONE_PCT, DEFAULT_SPLIT_BIAS } from './constants'
-export { type DragData, type DragSide } from './drag-data'
+export { type DragData } from './drag-data'
+export { useWorkspaceContext } from './context'

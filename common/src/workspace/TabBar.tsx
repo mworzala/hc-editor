@@ -14,9 +14,23 @@ type TabBarProps = {
     activeId: string | null
     onActivate: (id: string) => void
     onClose: (id: string) => void
+    /** Optional host hook — fires on right-click of a tab so the host can
+     *  render a context menu. The workspace primitive itself stays
+     *  menu-agnostic. */
+    onContextMenu?: (info: { paneId: string; tabId: string; x: number; y: number }) => void
+    /** Rendered after the tab list — host slot for things like an "add tab" button. */
+    trailing?: React.ReactNode
 }
 
-export function TabBar({ paneId, tabs, activeId, onActivate, onClose }: TabBarProps) {
+export function TabBar({
+    paneId,
+    tabs,
+    activeId,
+    onActivate,
+    onClose,
+    onContextMenu,
+    trailing,
+}: TabBarProps) {
     const scrollerRef = React.useRef<HTMLDivElement | null>(null)
 
     React.useEffect(() => {
@@ -45,11 +59,25 @@ export function TabBar({ paneId, tabs, activeId, onActivate, onClose }: TabBarPr
                     active={tab.id === activeId}
                     onActivate={onActivate}
                     onClose={onClose}
+                    onContextMenu={
+                        onContextMenu
+                            ? (e) => {
+                                  e.preventDefault()
+                                  onContextMenu({
+                                      paneId,
+                                      tabId: tab.id,
+                                      x: e.clientX,
+                                      y: e.clientY,
+                                  })
+                              }
+                            : undefined
+                    }
                 />
             ))}
             {tabs.length === 0 ? (
                 <div className='text-muted-foreground px-2 py-1 text-[0.7rem]'>Empty</div>
             ) : null}
+            {trailing}
         </div>
     )
 }
@@ -60,9 +88,17 @@ type SortableTabProps = {
     active: boolean
     onActivate: (id: string) => void
     onClose: (id: string) => void
+    onContextMenu?: (e: React.MouseEvent) => void
 }
 
-function SortableTab({ paneId, tab, active, onActivate, onClose }: SortableTabProps) {
+function SortableTab({
+    paneId,
+    tab,
+    active,
+    onActivate,
+    onClose,
+    onContextMenu,
+}: SortableTabProps) {
     const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
         id: tab.id,
         data: makeDragData({ kind: 'tab', paneId, tabId: tab.id }),
@@ -84,6 +120,7 @@ function SortableTab({ paneId, tab, active, onActivate, onClose }: SortableTabPr
                 isDragging && 'opacity-40',
             )}
             onClick={() => onActivate(tab.id)}
+            onContextMenu={onContextMenu}
             {...attributes}
             {...listeners}
         >

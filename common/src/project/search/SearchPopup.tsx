@@ -4,6 +4,7 @@ import {
     useMemo,
     useRef,
     type KeyboardEvent as ReactKeyboardEvent,
+    type ReactNode,
 } from 'react'
 import { FileIcon } from 'lucide-react'
 
@@ -23,6 +24,7 @@ import { type WorkspaceStoreHook } from '../../workspace/context'
 import { useSearchStore } from './search-store'
 import { useActionResults } from './sources/actions'
 import { useFileResults } from './sources/files'
+import { useTextSearchResults } from './sources/text'
 import { SEARCH_TABS, type ResultGroup, type SearchResult, type SearchTab } from './types'
 import { isTextContentType } from '../tools/files-tree'
 
@@ -66,7 +68,7 @@ function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
     const setQuery = useSearchStore((s) => s.setQuery)
     const close = useSearchStore((s) => s.close)
 
-    const groups = useResults(tab, query)
+    const { groups, textState } = useResults(tab, query)
     const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
     const [activeId, setActiveId] = useActiveResult(flatItems)
 
@@ -133,6 +135,11 @@ function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
                 onActivate={setActiveId}
                 onInvoke={invoke}
                 tab={tab}
+                footer={
+                    (tab === 'text' || tab === 'all') && textState.total > 0 ? (
+                        <TextSearchStatus state={textState} />
+                    ) : null
+                }
             />
         </>
     )
@@ -176,49 +183,50 @@ function ResultsList({
     onActivate,
     onInvoke,
     tab,
+    footer,
 }: {
     groups: readonly ResultGroup[]
     activeId: string | null
     onActivate: (id: string) => void
     onInvoke: (result: SearchResult) => void
     tab: SearchTab
+    footer?: ReactNode
 }) {
-    if (tab === 'text') {
-        return (
-            <div className='px-3 py-6 text-center text-xs text-muted-foreground'>
-                Text search isn't available yet.
-            </div>
-        )
-    }
     const empty = groups.every((g) => g.items.length === 0)
     if (empty) {
         return (
-            <div className='px-3 py-6 text-center text-xs text-muted-foreground'>
-                No results.
-            </div>
+            <>
+                <div className='px-3 py-6 text-center text-xs text-muted-foreground'>
+                    No results.
+                </div>
+                {footer}
+            </>
         )
     }
     return (
-        <ScrollArea className='max-h-[50vh] min-h-0'>
-            <div className='flex flex-col gap-1 px-1 pb-1' role='listbox'>
-                {groups.map((g) =>
-                    g.items.length === 0 ? null : (
-                        <div key={g.kind} className='flex flex-col gap-px'>
-                            {tab === 'all' ? <GroupHeader label={g.label} /> : null}
-                            {g.items.map((item) => (
-                                <ResultRow
-                                    key={item.id}
-                                    item={item}
-                                    active={item.id === activeId}
-                                    onMouseEnter={() => onActivate(item.id)}
-                                    onClick={() => onInvoke(item)}
-                                />
-                            ))}
-                        </div>
-                    ),
-                )}
-            </div>
-        </ScrollArea>
+        <>
+            <ScrollArea className='max-h-[50vh] min-h-0'>
+                <div className='flex flex-col gap-1 px-1 pb-1' role='listbox'>
+                    {groups.map((g) =>
+                        g.items.length === 0 ? null : (
+                            <div key={g.kind} className='flex flex-col gap-px'>
+                                {tab === 'all' ? <GroupHeader label={g.label} /> : null}
+                                {g.items.map((item) => (
+                                    <ResultRow
+                                        key={item.id}
+                                        item={item}
+                                        active={item.id === activeId}
+                                        onMouseEnter={() => onActivate(item.id)}
+                                        onClick={() => onInvoke(item)}
+                                    />
+                                ))}
+                            </div>
+                        ),
+                    )}
+                </div>
+            </ScrollArea>
+            {footer}
+        </>
     )
 }
 
@@ -317,26 +325,55 @@ function resultIcon(item: SearchResult) {
 
 // --- result wiring ---
 
-function useResults(tab: SearchTab, query: string): readonly ResultGroup[] {
+function useResults(
+    tab: SearchTab,
+    query: string,
+): {
+    groups: readonly ResultGroup[]
+    textState: { results: readonly SearchResult[]; loading: boolean; scanned: number; total: number }
+} {
     const actions = useActionResults(query, tab === 'all' ? 5 : 50)
     const files = useFileResults(query, tab === 'all' ? 5 : 50)
+    // Only run the text scan when the tab actually shows text results.
+    // Otherwise pass an empty query so the hook stays idle and doesn't
+    // hammer the network as the user filters Actions / Files.
+    const textActive = tab === 'text' || tab === 'all'
+    const textState = useTextSearchResults(textActive ? query : '')
 
-    return useMemo(() => {
+    const groups = useMemo<readonly ResultGroup[]>(() => {
         if (tab === 'actions') {
-            return [{ kind: 'action' as const, label: 'Actions', items: actions }]
+            return [{ kind: 'action', label: 'Actions', items: actions }]
         }
         if (tab === 'files') {
-            return [{ kind: 'file' as const, label: 'Files', items: files }]
+            return [{ kind: 'file', label: 'Files', items: files }]
         }
         if (tab === 'text') {
-            return []
+            return [{ kind: 'text', label: 'Text', items: textState.results }]
         }
-        // 'all' — grouped union
+        // 'all' — grouped union with a small per-section cap
         return [
-            { kind: 'action' as const, label: 'Actions', items: actions },
-            { kind: 'file' as const, label: 'Files', items: files },
+            { kind: 'action', label: 'Actions', items: actions },
+            { kind: 'file', label: 'Files', items: files },
+            { kind: 'text', label: 'Text', items: textState.results.slice(0, 5) },
         ]
-    }, [tab, actions, files])
+    }, [tab, actions, files, textState.results])
+
+    return { groups, textState }
+}
+
+function TextSearchStatus({
+    state,
+}: {
+    state: { loading: boolean; scanned: number; total: number }
+}) {
+    if (state.total === 0) return null
+    return (
+        <div className='px-3 py-1.5 text-[0.65rem] text-muted-foreground border-t border-border'>
+            {state.loading
+                ? `Scanning ${state.scanned}/${state.total} text files…`
+                : `Scanned ${state.total} text file${state.total === 1 ? '' : 's'}`}
+        </div>
+    )
 }
 
 function useActiveResult(items: readonly SearchResult[]) {
@@ -385,7 +422,14 @@ function useInvoke(close: () => void, useStore: WorkspaceStoreHook) {
                     return
                 }
                 case 'text': {
-                    // Phase 6 will wire this up properly with scrollToLine.
+                    const hit = result.data
+                    openEditor({
+                        // text/plain is the safe default — the text editor's
+                        // mimeTypes pattern matches text/*.
+                        mimeType: 'text/plain',
+                        payload: { path: hit.path, scrollToLine: hit.line },
+                        identityKey: 'path',
+                    })
                     close()
                     return
                 }

@@ -27,7 +27,14 @@ import { type EditorDefinition } from '../registry'
 
 export const TEXT_EDITOR_KIND = 'editor:text'
 
-export type TextEditorPayload = { path?: string; tempId?: string }
+export type TextEditorPayload = {
+    path?: string
+    tempId?: string
+    /** One-shot: when set, the editor scrolls to this line on mount, then
+     *  clears the field so subsequent activations don't re-scroll. Set by the
+     *  search popup's text-search result invocation. */
+    scrollToLine?: number
+}
 
 function parseTextPayload(raw: unknown): TextEditorPayload {
     if (!raw || typeof raw !== 'object') return {}
@@ -35,6 +42,7 @@ function parseTextPayload(raw: unknown): TextEditorPayload {
     const out: TextEditorPayload = {}
     if (typeof obj.path === 'string') out.path = obj.path
     if (typeof obj.tempId === 'string') out.tempId = obj.tempId
+    if (typeof obj.scrollToLine === 'number') out.scrollToLine = obj.scrollToLine
     return out
 }
 
@@ -134,6 +142,19 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const [savePromptOpen, setSavePromptOpen] = useState(false)
     const [saveError, setSaveError] = useState<unknown>(null)
 
+    // Honor scrollToLine on first mount of the tab — once we've taken the
+    // hint, scrub it from the persisted payload so re-activations of the
+    // same tab don't keep jumping back.
+    const initialScrollToLine = useRef(payload.scrollToLine).current
+    useEffect(() => {
+        if (initialScrollToLine === undefined) return
+        if (payload.scrollToLine === undefined) return
+        useStore.getState().updateTab(tab.id, {
+            payload: { path: payload.path, tempId: payload.tempId },
+        })
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- run-once cleanup
+    }, [])
+
     const saveAtPath = useCallback(
         async (path: string) => {
             const body = documentStore.getState().documents[docId]?.current ?? ''
@@ -217,6 +238,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                 <CodeEditor
                     value={doc.current}
                     onChange={setContent}
+                    scrollToLine={initialScrollToLine}
                     onBlur={() => {
                         if (effectivePath) void save()
                     }}

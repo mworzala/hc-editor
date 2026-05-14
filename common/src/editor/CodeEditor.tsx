@@ -24,7 +24,6 @@ import { cn } from '@hollowcube/design-system'
 import { ActionContextMenu } from '../project/actions/ActionContextMenu'
 import { type Action } from '../project/actions/types'
 import { UsagesPopup, type UsageMatch } from './components/UsagesPopup'
-import { runFormatOnView } from './formatters/runFormat'
 import { activeLineHighlight } from './extensions/activeLine'
 import {
     cmdHoverWord,
@@ -48,6 +47,7 @@ import {
 import { editorHighlightStyle } from './extensions/highlightStyle'
 import { iconGutterLineOffset, iconGutterMap, iconNumberGutter } from './extensions/iconGutter'
 import { editorTheme } from './extensions/theme'
+import { runFormatOnView } from './formatters/runFormat'
 import { type LanguageDefinition } from './languages'
 import { armadaDark } from './themes'
 
@@ -796,7 +796,14 @@ function CodeEditor({
                 run: findInFile,
             },
         ]
-    }, [ctxMenu.token, ctxMenu.tokenFrom, ctxMenu.tokenTo, openUsages, language, onGoToDefinitionAt])
+    }, [
+        ctxMenu.token,
+        ctxMenu.tokenFrom,
+        ctxMenu.tokenTo,
+        openUsages,
+        language,
+        onGoToDefinitionAt,
+    ])
 
     return (
         <div className={cn('relative h-full w-full overflow-hidden px-2', className)}>

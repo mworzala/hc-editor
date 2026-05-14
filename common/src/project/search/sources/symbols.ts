@@ -27,9 +27,10 @@ export function useWorkspaceSymbolResults(query: string): SearchResult[] {
         const timer = window.setTimeout(async () => {
             let raw: WorkspaceSymbol[] | SymbolInformation[] | null = null
             try {
-                raw = await client.sendRequest<
-                    WorkspaceSymbol[] | SymbolInformation[] | null
-                >('workspace/symbol', { query: trimmed })
+                raw = await client.sendRequest<WorkspaceSymbol[] | SymbolInformation[] | null>(
+                    'workspace/symbol',
+                    { query: trimmed },
+                )
             } catch {
                 return
             }

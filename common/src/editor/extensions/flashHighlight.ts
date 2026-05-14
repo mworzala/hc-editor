@@ -6,9 +6,7 @@ import { Decoration, EditorView, ViewPlugin } from '@codemirror/view'
 // `setFlashHighlight` with a `{ from, to }` range; the extension paints a
 // background-tinted Decoration for ~800ms and then clears itself.
 
-export const setFlashHighlight = StateEffect.define<
-    { from: number; to: number } | null
->()
+export const setFlashHighlight = StateEffect.define<{ from: number; to: number } | null>()
 
 const flashField = StateField.define<{ from: number; to: number } | null>({
     create: () => null,
@@ -28,10 +26,7 @@ const flashField = StateField.define<{ from: number; to: number } | null>({
         EditorView.decorations.from(f, (range) =>
             range
                 ? Decoration.set([
-                      Decoration.mark({ class: 'cm-flash-highlight' }).range(
-                          range.from,
-                          range.to,
-                      ),
+                      Decoration.mark({ class: 'cm-flash-highlight' }).range(range.from, range.to),
                   ])
                 : Decoration.none,
         ),

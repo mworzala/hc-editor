@@ -19,8 +19,8 @@ import type {
 import { cn, ScrollArea } from '@hollowcube/design-system'
 
 import { getActiveEditor } from '../../editor/active-editor-registry'
-import { useLuauLsp } from '../../lsp'
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
+import { useLuauLsp } from '../../lsp'
 import { rangeToOffsets } from '../../lsp/cm/lspUtils'
 import { type LspClient } from '../../lsp/LspClient'
 import { findLeaf, type Tab, type WorkspaceState } from '../../workspace'
@@ -303,9 +303,10 @@ export function useDocumentSymbols(
             inFlight = true
             let result: DocumentSymbol[] | SymbolInformation[] | null = null
             try {
-                result = await client.sendRequest<
-                    DocumentSymbol[] | SymbolInformation[] | null
-                >('textDocument/documentSymbol', { textDocument: { uri: focused.uri } })
+                result = await client.sendRequest<DocumentSymbol[] | SymbolInformation[] | null>(
+                    'textDocument/documentSymbol',
+                    { textDocument: { uri: focused.uri } },
+                )
             } catch {
                 inFlight = false
                 return

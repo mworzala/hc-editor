@@ -10,8 +10,8 @@ import type { DocumentLink } from 'vscode-languageserver-types'
 
 import { type LspClient } from '../LspClient'
 import { type ResolvedUri } from '../uriResolver'
-import { rangeToOffsets } from './lspUtils'
 import { type DefinitionOpenHandler, type DefinitionResolver } from './definition'
+import { rangeToOffsets } from './lspUtils'
 
 // Document links — typically `require("…")` paths. The server returns ranges
 // + target URIs; we render the ranges with an underline and route Cmd+click

@@ -34,13 +34,7 @@ export function LspUiOverlay() {
     )
 }
 
-function CodeActionMenu({
-    state,
-    onClose,
-}: {
-    state: CodeActionMenuState
-    onClose: () => void
-}) {
+function CodeActionMenu({ state, onClose }: { state: CodeActionMenuState; onClose: () => void }) {
     const anchor = usePointAnchor(state.x, state.y)
 
     if (state.items.length === 0) {

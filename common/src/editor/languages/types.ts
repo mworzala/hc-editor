@@ -1,9 +1,9 @@
 import { type Extension } from '@codemirror/state'
 import { type EditorView } from '@codemirror/view'
 
-import { type UsageMatch } from '../components/UsagesPopup'
-import { type ProjectServices } from '../../project/services'
 import { type OpenEditorArgs } from '../../project/actions/project-actions'
+import { type ProjectServices } from '../../project/services'
+import { type UsageMatch } from '../components/UsagesPopup'
 
 // Lightweight registration for a language. Carries:
 //  • Always-on extensions / formatter (cmExtension, formatter).

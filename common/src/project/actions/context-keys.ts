@@ -97,7 +97,10 @@ export class ContextKeys {
 
 /** True iff every `required` key is currently set. Empty `required` always
  *  matches. Mirrors the existing `actionMatchesContext` semantics. */
-export function contextMatches(keys: ContextKeys, required: readonly ContextKey[] | undefined): boolean {
+export function contextMatches(
+    keys: ContextKeys,
+    required: readonly ContextKey[] | undefined,
+): boolean {
     if (!required || required.length === 0) return true
     for (const k of required) {
         if (!keys.get(k)) return false

@@ -63,7 +63,10 @@ export function LspWatchedFilesBridge() {
     return null
 }
 
-function forward(evt: ProjectEventEnvelope, lspClient: NonNullable<ReturnType<typeof useLuauLsp>['client']>): void {
+function forward(
+    evt: ProjectEventEnvelope,
+    lspClient: NonNullable<ReturnType<typeof useLuauLsp>['client']>,
+): void {
     const uri = fileUriFromPath(evt.path)
     // Server-supplied envelope has no kind discriminator; treat as Changed.
     // The client filters by glob via `getRegistrations(...)` before sending.

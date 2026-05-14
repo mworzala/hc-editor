@@ -99,4 +99,3 @@ describe('parseTextPayload', () => {
         expect(parseTextPayload(input)).toEqual(input)
     })
 })
-

@@ -1,8 +1,8 @@
 import { createHighlighter, type Highlighter } from 'shiki'
 
 import { formatLuau } from '../formatters/stylua'
-import luauGrammar from './Luau.tmLanguage.json'
 import { createLuauEditorBinding } from './luau-editor-services'
+import luauGrammar from './Luau.tmLanguage.json'
 import { shikiHighlight } from './shikiHighlight'
 import { type LanguageDefinition } from './types'
 

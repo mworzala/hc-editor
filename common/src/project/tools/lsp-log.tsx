@@ -10,12 +10,7 @@ import {
 
 import { Button, cn, ScrollArea } from '@hollowcube/design-system'
 
-import {
-    useLuauLsp,
-    type LspLogMessage,
-    type LspRpcMessage,
-    type LspState,
-} from '../../lsp'
+import { useLuauLsp, type LspLogMessage, type LspRpcMessage, type LspState } from '../../lsp'
 import { type ToolDefinition } from '../registry'
 
 // Tool window that surfaces:
@@ -220,8 +215,8 @@ function RpcList() {
             <>
                 <Toolbar count={0} onClear={() => {}} disabled />
                 <Empty>
-                    The LSP client doesn&apos;t expose a message log yet. Reload the page to
-                    pick up the latest build.
+                    The LSP client doesn&apos;t expose a message log yet. Reload the page to pick up
+                    the latest build.
                 </Empty>
             </>
         )

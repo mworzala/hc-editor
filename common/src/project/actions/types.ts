@@ -12,6 +12,21 @@
 
 import type { ReactNode } from 'react'
 
+export const MENU_PATHS = ['file', 'edit', 'view', 'help'] as const
+export type MenuPath = (typeof MENU_PATHS)[number]
+
+/** Placement metadata for an action's appearance in the native menu bar. */
+export type ActionMenu = {
+    path: MenuPath
+    /** Separator-bounded section within the submenu. Items with different
+     *  `group` values are visually divided by a separator. */
+    group?: string
+    /** Sort order within a group; default 1000. */
+    order?: number
+    /** Display label override. Falls back to `Action.title` when absent. */
+    label?: string
+}
+
 export type ActionRunSource = 'palette' | 'context-menu' | 'hotkey' | 'native-menu' | 'programmatic'
 
 export type ActionRunContext = {
@@ -44,6 +59,9 @@ export type Action = {
      *  click is a no-op. Useful for affordance (e.g. "Find Usages" without a
      *  token under the cursor). */
     disabled?: boolean
+    /** When present, the action appears in the native menu bar under
+     *  `menu.path`. Absent = palette / hotkey only. */
+    menu?: ActionMenu
     run: (ctx: ActionRunContext) => void | Promise<void>
 }
 

@@ -21,15 +21,12 @@ export function lspOnTypeFormatting(client: LspClient, uri: string) {
     const fetch = async (view: EditorView, pos: number, ch: string): Promise<void> => {
         let edits: TextEdit[] | null = null
         try {
-            edits = await client.sendRequest<TextEdit[] | null>(
-                'textDocument/onTypeFormatting',
-                {
-                    textDocument: { uri },
-                    position: offsetToPosition(view.state.doc, pos),
-                    ch,
-                    options: { tabSize: 4, insertSpaces: true },
-                },
-            )
+            edits = await client.sendRequest<TextEdit[] | null>('textDocument/onTypeFormatting', {
+                textDocument: { uri },
+                position: offsetToPosition(view.state.doc, pos),
+                ch,
+                options: { tabSize: 4, insertSpaces: true },
+            })
         } catch {
             return
         }

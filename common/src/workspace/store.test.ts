@@ -1,20 +1,12 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
 import { createMemoryStorage, type Storage } from '../platform'
-import {
-    createWorkspaceStore,
-    findLeaf,
-    selectActiveContextTags,
-} from './store'
+import { createWorkspaceStore, findLeaf, selectActiveContextTags } from './store'
 import { type EditorGroupNode, type Tab, type WorkspaceState } from './types'
 
 const STORAGE_KEY = 'test:workspace'
 
-function leaf(
-    id: string,
-    tabs: Tab[] = [],
-    activeId: string | null = null,
-): EditorGroupNode {
+function leaf(id: string, tabs: Tab[] = [], activeId: string | null = null): EditorGroupNode {
     return { kind: 'leaf', id, tabs, activeId }
 }
 
@@ -90,11 +82,7 @@ describe('workspace store — addTab', () => {
 describe('workspace store — closeTab', () => {
     test('removes the tab and falls back to the previous tab as active', () => {
         const initial = makeInitial('leaf-A')
-        initial.center = leaf(
-            'leaf-A',
-            [tab('t1'), tab('t2'), tab('t3')],
-            't2',
-        )
+        initial.center = leaf('leaf-A', [tab('t1'), tab('t2'), tab('t3')], 't2')
         const store = makeStore({ initialState: initial })
 
         store.getState().closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't2')
@@ -158,10 +146,7 @@ describe('workspace store — moveTab', () => {
             id: 'split-1',
             orientation: 'horizontal',
             sizes: [50, 50],
-            children: [
-                leaf('leaf-A', [tab('t1')], 't1'),
-                leaf('leaf-B', [tab('t2')], 't2'),
-            ],
+            children: [leaf('leaf-A', [tab('t1')], 't1'), leaf('leaf-B', [tab('t2')], 't2')],
         }
         initial.focusedLeafId = 'leaf-A'
         const store = makeStore({ initialState: initial })
@@ -267,10 +252,7 @@ describe('workspace store — focus tracking', () => {
             id: 'split-1',
             orientation: 'horizontal',
             sizes: [50, 50],
-            children: [
-                leaf('leaf-A', [tab('t1')], 't1'),
-                leaf('leaf-B', [tab('t2')], 't2'),
-            ],
+            children: [leaf('leaf-A', [tab('t1')], 't1'), leaf('leaf-B', [tab('t2')], 't2')],
         }
         initial.focusedLeafId = 'leaf-A'
         const store = makeStore({ initialState: initial })
@@ -286,10 +268,7 @@ describe('workspace store — focus tracking', () => {
             id: 'split-1',
             orientation: 'horizontal',
             sizes: [50, 50],
-            children: [
-                leaf('leaf-A', [tab('t1')], 't1'),
-                leaf('leaf-B', [tab('t2')], 't2'),
-            ],
+            children: [leaf('leaf-A', [tab('t1')], 't1'), leaf('leaf-B', [tab('t2')], 't2')],
         }
         initial.focusedLeafId = 'leaf-B'
         const store = makeStore({ initialState: initial })

@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import {
-    AlertCircleIcon,
-    AlertTriangleIcon,
-    FileIcon,
-    InfoIcon,
-    LightbulbIcon,
-} from 'lucide-react'
+import { AlertCircleIcon, AlertTriangleIcon, FileIcon, InfoIcon, LightbulbIcon } from 'lucide-react'
 import type { Diagnostic } from 'vscode-languageserver-types'
 
 import { cn, ScrollArea } from '@hollowcube/design-system'
@@ -114,13 +108,7 @@ function ProblemsPane() {
     )
 }
 
-function ProblemsList({
-    rows,
-    onOpen,
-}: {
-    rows: readonly Row[]
-    onOpen: (row: Row) => void
-}) {
+function ProblemsList({ rows, onOpen }: { rows: readonly Row[]; onOpen: (row: Row) => void }) {
     const byPath = useMemo(() => groupByPath(rows), [rows])
     return (
         <ul className='flex flex-col gap-2 px-1 py-1 text-xs'>

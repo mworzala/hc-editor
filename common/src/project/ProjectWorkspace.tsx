@@ -55,12 +55,7 @@ import { structureTool } from './tools/structure'
 const PROJECT_ID = 'f973cc98-e806-464d-9435-fc4b1d49fde7'
 const STORAGE_KEY = `hc-project:${PROJECT_ID}:workspace-v2`
 
-const TOOLS: readonly ToolDefinition[] = [
-    filesTool,
-    structureTool,
-    problemsTool,
-    lspLogTool,
-]
+const TOOLS: readonly ToolDefinition[] = [filesTool, structureTool, problemsTool, lspLogTool]
 const EDITORS: readonly AnyEditorDefinition[] = [
     welcomeEditor,
     apiTestEditor,
@@ -266,6 +261,7 @@ function NewFileAction({ useStore }: { useStore: WorkspaceStoreHook }) {
             title: 'New Untitled File',
             keybinding: '$mod+n',
             contexts: ['global'],
+            menu: { path: 'file' as const, group: 'new', order: 10 },
             run: handler,
         }),
         [handler],

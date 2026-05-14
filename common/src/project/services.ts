@@ -12,8 +12,8 @@
 // here as their refactors land.
 
 import { type LspClient, type LspState } from '../lsp/LspClient'
-import { ActionRegistry } from './actions/registry-class'
 import { ContextKeys } from './actions/context-keys'
+import { ActionRegistry } from './actions/registry-class'
 
 export type LuauLspSnapshot = {
     status: LspState

@@ -223,10 +223,7 @@ export class LspClient {
         for (const cb of this.rpcListeners) cb(this.rpcMessages)
     }
 
-    onDiagnostics(
-        cb: DiagnosticsListener,
-        options: { replay?: boolean } = {},
-    ): () => void {
+    onDiagnostics(cb: DiagnosticsListener, options: { replay?: boolean } = {}): () => void {
         const replay = options.replay ?? true
         this.diagnosticsListeners.add(cb)
         if (replay) {
@@ -481,8 +478,7 @@ export class LspClient {
                     ? 'request'
                     : 'notification'
         const inboundMethod =
-            msg.method ??
-            (typeof msg.id === 'number' ? this.requestMethods.get(msg.id) : undefined)
+            msg.method ?? (typeof msg.id === 'number' ? this.requestMethods.get(msg.id) : undefined)
         this.appendRpcMessage({
             direction: 'server→client',
             kind: inboundKind,
@@ -670,10 +666,7 @@ export class LspClient {
 /** True when at least one registration's glob pattern + kind mask accepts the
  *  uri. Patterns are LSP `RelativePattern | string` shapes; we treat both as
  *  the glob string. `kind` defaults to 7 (create|change|delete) when omitted. */
-function watchedByAnyRegistration(
-    uri: string,
-    regs: readonly DynamicRegistration[],
-): boolean {
+function watchedByAnyRegistration(uri: string, regs: readonly DynamicRegistration[]): boolean {
     for (const reg of regs) {
         const opts = reg.registerOptions as
             | { watchers?: { globPattern: unknown; kind?: number }[] }
@@ -684,9 +677,10 @@ function watchedByAnyRegistration(
             return true
         }
         for (const w of watchers) {
-            const glob = typeof w.globPattern === 'string'
-                ? w.globPattern
-                : ((w.globPattern as { pattern?: string })?.pattern ?? '')
+            const glob =
+                typeof w.globPattern === 'string'
+                    ? w.globPattern
+                    : ((w.globPattern as { pattern?: string })?.pattern ?? '')
             if (!glob) continue
             if (matchGlob(uri, glob)) return true
         }

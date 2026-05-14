@@ -1,3 +1,4 @@
+import wasmUrl from '@johnnymorganz/stylua/stylua_lib_bg.wasm?url'
 import init, {
     Config,
     formatCode,
@@ -5,7 +6,6 @@ import init, {
     LuaVersion,
     OutputVerification,
 } from '@johnnymorganz/stylua/web'
-import wasmUrl from '@johnnymorganz/stylua/stylua_lib_bg.wasm?url'
 
 import { type FormatResult } from '../languages/types'
 

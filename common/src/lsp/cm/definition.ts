@@ -85,9 +85,7 @@ export async function runGotoDefinitionAtPos(
     if (await tryNavigate(view, client, 'textDocument/definition', uri, pos, resolve, onOpen)) {
         return
     }
-    if (
-        await tryNavigate(view, client, 'textDocument/typeDefinition', uri, pos, resolve, onOpen)
-    ) {
+    if (await tryNavigate(view, client, 'textDocument/typeDefinition', uri, pos, resolve, onOpen)) {
         return
     }
     if (showReferences) {
@@ -214,15 +212,7 @@ export function lspGotoDefinition(
             if (!event.metaKey && !event.ctrlKey) return false
             const pos = view.posAtCoords({ x: event.clientX, y: event.clientY })
             if (pos === null) return false
-            void runGotoDefinitionAtPos(
-                view,
-                client,
-                uri,
-                pos,
-                resolve,
-                onOpen,
-                showReferences,
-            )
+            void runGotoDefinitionAtPos(view, client, uri, pos, resolve, onOpen, showReferences)
             return false
         },
     })

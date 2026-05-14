@@ -1,34 +1,48 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 import { usePlatform } from '../../platform'
-import { NATIVE_MENU_SLOTS } from './native-menu-slots'
-import { useRunAction } from './registry'
+import { useActionContextSet } from './context'
+import { buildMenuPayload } from './menu-payload'
+import { useActions, useRunAction } from './registry'
 
-// Subscribes to native menu clicks on platforms that expose one
-// (`platform.menu`). Mounting this is a no-op on web; on desktop it routes
-// `menu:invoke` events through the action registry.
+// Bridges the action registry with the platform's native menu (desktop only).
 //
-// Renders nothing — it's a pure side-effect component, mounted once inside
-// `<ActionRegistryProvider>` + `<ActionContextProvider>` so the registry +
-// context snapshot are available.
+// Two responsibilities, kept in separate effects so they don't churn each
+// other:
+//
+//   1. Push the current menu payload to the host whenever the registered
+//      actions or context-tag set change. A JSON-string equality check on
+//      the previous emit skips no-op updates (common during render thrash).
+//
+//   2. Subscribe to native-menu click events and dispatch them through the
+//      action registry's context-aware runner.
+//
+// Renders nothing — mounted once inside `<ActionRegistryProvider>` +
+// `<ActionContextProvider>` so both hooks have a source.
 
 export function NativeMenuBridge() {
     const platform = usePlatform()
+    const actions = useActions()
+    const contextSet = useActionContextSet()
     const runAction = useRunAction()
+    const lastJsonRef = useRef<string>('')
 
     useEffect(() => {
         const menu = platform.menu
         if (!menu) return
-        menu.register?.(NATIVE_MENU_SLOTS)
-        const unsubscribe = menu.onInvoke((slotId) => {
-            const actionId = (NATIVE_MENU_SLOTS as Record<string, string | undefined>)[slotId]
-            if (!actionId) {
-                console.warn('[NativeMenuBridge] no action for slot', slotId)
-                return
-            }
+        const items = buildMenuPayload({ actions, contextSet })
+        const next = JSON.stringify(items)
+        if (next === lastJsonRef.current) return
+        lastJsonRef.current = next
+        menu.setItems(items)
+    }, [platform, actions, contextSet])
+
+    useEffect(() => {
+        const menu = platform.menu
+        if (!menu) return
+        return menu.onInvoke((actionId) => {
             runAction(actionId, { source: 'native-menu' })
         })
-        return unsubscribe
     }, [platform, runAction])
 
     return null

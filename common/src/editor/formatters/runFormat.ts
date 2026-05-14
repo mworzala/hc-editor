@@ -15,9 +15,7 @@ import { type FormatResult, type LanguageDefinition } from '../languages/types'
 
 type ChangeSpec = { from: number; to: number; insert: string }
 
-export type RunFormatOutcome =
-    | { ok: true }
-    | { ok: false; error: string }
+export type RunFormatOutcome = { ok: true } | { ok: false; error: string }
 
 export async function runFormatOnView(
     view: EditorView | null,

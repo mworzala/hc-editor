@@ -72,8 +72,7 @@ export function editorTheme(p: EditorPalette) {
                 color: 'var(--popover-foreground)',
                 border: '1px solid var(--border)',
                 borderRadius: '6px',
-                boxShadow:
-                    '0 4px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25)',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.35), 0 2px 4px rgba(0, 0, 0, 0.25)',
                 overflow: 'hidden',
             },
 
@@ -243,8 +242,7 @@ export function editorTheme(p: EditorPalette) {
             },
             '.cm-completionLabel': {
                 flex: '1 1 auto',
-                fontFamily:
-                    "'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace",
+                fontFamily: "'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace",
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
@@ -260,8 +258,7 @@ export function editorTheme(p: EditorPalette) {
                 paddingLeft: '8px',
                 color: 'color-mix(in srgb, currentColor 55%, transparent)',
                 fontStyle: 'normal',
-                fontFamily:
-                    "'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace",
+                fontFamily: "'JetBrains Mono Variable', ui-monospace, SFMono-Regular, monospace",
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',

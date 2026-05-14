@@ -1,11 +1,6 @@
 import { describe, expect, test } from 'bun:test'
 
-import {
-    fileUriFromPath,
-    pathFromFileUri,
-    resolveUri,
-    withSwappedExtension,
-} from './uriResolver'
+import { fileUriFromPath, pathFromFileUri, resolveUri, withSwappedExtension } from './uriResolver'
 
 describe('pathFromFileUri', () => {
     test('strips file:// prefix and preserves leading slash', () => {
@@ -24,15 +19,11 @@ describe('pathFromFileUri', () => {
 
 describe('fileUriFromPath', () => {
     test('prepends file:// to an absolute path', () => {
-        expect(fileUriFromPath('/workspace/src/main.luau')).toBe(
-            'file:///workspace/src/main.luau',
-        )
+        expect(fileUriFromPath('/workspace/src/main.luau')).toBe('file:///workspace/src/main.luau')
     })
 
     test('normalizes paths without a leading slash', () => {
-        expect(fileUriFromPath('workspace/src/main.luau')).toBe(
-            'file:///workspace/src/main.luau',
-        )
+        expect(fileUriFromPath('workspace/src/main.luau')).toBe('file:///workspace/src/main.luau')
     })
 
     test('round-trips with pathFromFileUri', () => {

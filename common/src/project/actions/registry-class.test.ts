@@ -66,9 +66,14 @@ describe('ActionRegistry', () => {
     describe('run', () => {
         test('returns true and invokes the handler for a registered action', () => {
             let called = false
-            registry.register(makeAction({ id: 'a', run: () => {
-                    called = true
-                } }))
+            registry.register(
+                makeAction({
+                    id: 'a',
+                    run: () => {
+                        called = true
+                    },
+                }),
+            )
             const ok = registry.run('a', runCtx)
             expect(ok).toBe(true)
             expect(called).toBe(true)
@@ -81,9 +86,13 @@ describe('ActionRegistry', () => {
         test('respects `disabled` — does not invoke and returns false', () => {
             let called = false
             registry.register(
-                makeAction({ id: 'a', disabled: true, run: () => {
-                    called = true
-                } }),
+                makeAction({
+                    id: 'a',
+                    disabled: true,
+                    run: () => {
+                        called = true
+                    },
+                }),
             )
             expect(registry.run('a', runCtx)).toBe(false)
             expect(called).toBe(false)
@@ -92,9 +101,13 @@ describe('ActionRegistry', () => {
         test('respects `when` guard — does not invoke when false, returns false', () => {
             let called = false
             registry.register(
-                makeAction({ id: 'a', when: () => false, run: () => {
-                    called = true
-                } }),
+                makeAction({
+                    id: 'a',
+                    when: () => false,
+                    run: () => {
+                        called = true
+                    },
+                }),
             )
             expect(registry.run('a', runCtx)).toBe(false)
             expect(called).toBe(false)
@@ -136,7 +149,10 @@ describe('ActionRegistry', () => {
         test('list returns every registered action', () => {
             registry.register(makeAction({ id: 'a' }))
             registry.register(makeAction({ id: 'b' }))
-            const ids = registry.list().map((a) => a.id).toSorted()
+            const ids = registry
+                .list()
+                .map((a) => a.id)
+                .toSorted()
             expect(ids).toEqual(['a', 'b'])
         })
 

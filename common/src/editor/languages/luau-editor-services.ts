@@ -1,8 +1,6 @@
 import { type Extension } from '@codemirror/state'
 import type { Diagnostic } from 'vscode-languageserver-types'
 
-import { TEXT_EDITOR_KIND } from '../../project/editors/text-kind'
-import { DOCS_EDITOR_KIND } from '../../project/editors/docs-kind'
 import {
     fileUriFromPath,
     lspExtensions,
@@ -11,6 +9,8 @@ import {
     type ReferenceMatch,
     type ResolvedUri,
 } from '../../lsp'
+import { DOCS_EDITOR_KIND } from '../../project/editors/docs-kind'
+import { TEXT_EDITOR_KIND } from '../../project/editors/text-kind'
 import { type UsageMatch } from '../components/UsagesPopup'
 import {
     type DiagnosticCounts,
@@ -159,7 +159,7 @@ export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEdito
         const counts = tallyDiagnostics(client.getDiagnostics(uri))
 
         snapshot = {
-            extensions: running ? cachedExtensions ?? [] : [],
+            extensions: running ? (cachedExtensions ?? []) : [],
             gotoDefinitionAt: running
                 ? (pos, view) => {
                       void runGotoDefinitionAtPos(

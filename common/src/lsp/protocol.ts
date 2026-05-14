@@ -16,9 +16,7 @@ export type JsonRpcMessage = {
 
 export const LUAU_LANGUAGE_ID = 'luau'
 
-export const SERVER_REQUESTS_TO_NULL_OUT = new Set<string>([
-    'window/workDoneProgress/create',
-])
+export const SERVER_REQUESTS_TO_NULL_OUT = new Set<string>(['window/workDoneProgress/create'])
 
 export const LSP_SEVERITY = {
     Error: 1,

@@ -12,9 +12,11 @@ import (
 var assets embed.FS
 
 func init() {
-	// Native menu clicks: data is the slot id (`file.new`, etc.) — the
-	// frontend maps it to a registered Action and dispatches.
+	// Go → frontend: a native menu item was clicked. Data is the originating
+	// action id; the frontend resolves it through the action registry.
 	application.RegisterEvent[string](MenuInvokeEvent)
+	// Frontend → Go: replace the dynamic menu items wholesale.
+	application.RegisterEvent[SetItemsPayload](MenuSetItemsEvent)
 }
 
 // main function serves as the application's entry point. It initializes the application, creates a window,
@@ -40,6 +42,23 @@ func main() {
 	})
 
 	app.Menu.SetApplicationMenu(BuildAppMenu(app))
+
+	// Listen for dynamic-menu updates from the frontend. The frontend
+	// computes the desired item list from the action registry + context
+	// set and pushes it here; we swap the application menu wholesale.
+	// NSMenu calls must happen on the main thread, but event listeners
+	// fire on a goroutine — so the rebuild has to be dispatched via
+	// InvokeAsync.
+	app.Event.On(MenuSetItemsEvent, func(e *application.CustomEvent) {
+		payload, ok := e.Data.(SetItemsPayload)
+		if !ok {
+			log.Printf("menu:set-items: unexpected data type %T", e.Data)
+			return
+		}
+		application.InvokeAsync(func() {
+			RebuildAppMenu(app, payload.Items)
+		})
+	})
 
 	app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title: "Window 1",

@@ -18,16 +18,12 @@ type PrepareRenameResult =
 
 import { getActiveEditor } from '../../editor/active-editor-registry'
 import { stringTokenAt } from '../../editor/extensions/tokens'
-import {
-    useRegisterAction,
-    type Action,
-    type ActionRunContext,
-} from '../../project/actions'
+import { useRegisterAction, type Action, type ActionRunContext } from '../../project/actions'
 import { useProjectServices } from '../../project/services-context'
 import { findLeaf } from '../../workspace'
 import { type WorkspaceStoreHook } from '../../workspace/context'
-import { type LspClient } from '../LspClient'
 import { offsetToPosition, rangeToOffsets } from '../cm/lspUtils'
+import { type LspClient } from '../LspClient'
 import { useLspUiBus } from './lsp-ui-context'
 
 // Registers globally-bound LSP actions (code-action + rename). Both resolve
@@ -78,9 +74,10 @@ export function LspActions({ useStore }: { useStore: WorkspaceStoreHook }) {
                 console.warn('[lsp] codeAction failed', err)
                 return
             }
-            const items = (result ?? []).filter(
-                (a) => !(a as CodeAction).disabled,
-            ) as (CodeAction | Command)[]
+            const items = (result ?? []).filter((a) => !(a as CodeAction).disabled) as (
+                | CodeAction
+                | Command
+            )[]
 
             const coords = view.coordsAtPos(selection.head)
             const x = coords?.left ?? window.innerWidth / 2
@@ -188,10 +185,7 @@ export function LspActions({ useStore }: { useStore: WorkspaceStoreHook }) {
     return null
 }
 
-function overlappingDiagnostics(
-    diagnostics: readonly Diagnostic[],
-    range: Range,
-): Diagnostic[] {
+function overlappingDiagnostics(diagnostics: readonly Diagnostic[], range: Range): Diagnostic[] {
     return diagnostics.filter((d) => rangesOverlap(d.range, range))
 }
 

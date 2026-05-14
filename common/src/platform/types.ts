@@ -1,3 +1,5 @@
+import type { MenuPath } from '../project/actions/types'
+
 export type Storage = {
     get(key: string): string | null
     set(key: string, value: string): void
@@ -37,22 +39,30 @@ export type WindowControls = {
     close(): void
 }
 
-/** Native menu controller. The host registers a slot-id → action-id table
- *  once on mount, then subscribes to `onInvoke` to receive clicks on native
- *  menu items. The Go side owns the menu structure; the JS side just routes
- *  clicks through the action registry. Desktop only.
- *
- *  The bridge has no opinion about what an action is — it just forwards slot
- *  strings. The slot table lives in the frontend, alongside the action
- *  registrations, so adding a menu item is a Go change + a one-line JS table
- *  update. */
+/** Wire-format payload for a single native menu item. Built from registered
+ *  actions on the frontend and pushed wholesale to the Go-side menu builder. */
+export type MenuItemPayload = {
+    path: MenuPath
+    actionId: string
+    label: string
+    group: string
+    order: number
+    /** Wails accelerator string (e.g. `'CmdOrCtrl+N'`). Empty when no shortcut. */
+    accelerator: string
+    enabled: boolean
+}
+
+/** Native menu controller. The frontend owns the dynamic menu structure —
+ *  it computes a list of items from the action registry (+ current context)
+ *  and pushes it to the host via `setItems`. Click events flow back through
+ *  `onInvoke` carrying the originating action id. Desktop only. */
 export type MenuController = {
-    /** Optional: register a slot map so the controller can validate or
-     *  pre-warm. Most impls treat this as a no-op since the lookup happens
-     *  in the action registry layer above. */
-    register?: (slotMap: Readonly<Record<string, string>>) => void
-    /** Subscribe to native menu clicks. Returns an unsubscribe function. */
-    onInvoke: (handler: (slotId: string) => void) => () => void
+    /** Replace the dynamic menu items with the given payload. Idempotent —
+     *  the host rebuilds atomically each call. */
+    setItems(items: readonly MenuItemPayload[]): void
+    /** Subscribe to native menu clicks. The handler receives the clicked
+     *  item's action id. Returns an unsubscribe function. */
+    onInvoke: (handler: (actionId: string) => void) => () => void
 }
 
 export type Platform = {

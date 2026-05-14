@@ -80,10 +80,7 @@ export function useProjectActionsForStore(useStore: WorkspaceStoreHook): Project
                         const merged = { ...existing.tab.payload, ...args.payload }
                         store.updateTab(existing.tab.id, { payload: merged })
                     }
-                    store.activateTab(
-                        { kind: 'editor', leafId: existing.leafId },
-                        existing.tab.id,
-                    )
+                    store.activateTab({ kind: 'editor', leafId: existing.leafId }, existing.tab.id)
                     return
                 }
             }

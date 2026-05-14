@@ -1,10 +1,4 @@
-import {
-    createContext,
-    useContext,
-    useMemo,
-    useSyncExternalStore,
-    type ReactNode,
-} from 'react'
+import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 
 import { LspUiBus } from './lsp-ui-bus'
 

@@ -8,6 +8,7 @@ import {
     useSyncExternalStore,
     type ReactNode,
 } from 'react'
+import { type EditorView } from '@codemirror/view'
 
 import {
     useV1ProjectFilesGet,
@@ -15,8 +16,6 @@ import {
     type ProjectFileBytes,
 } from '@hollowcube/api'
 import { Button, Input, Label } from '@hollowcube/design-system'
-
-import { type EditorView } from '@codemirror/view'
 
 import { CodeEditor, type CodeEditorApi, type UsageMatch } from '../../editor'
 import { clearActiveEditor, setActiveEditor } from '../../editor/active-editor-registry'
@@ -205,11 +204,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     // the current document each invocation — kept here so the language module
     // doesn't need to reach into the document store.
     const showUsagesForBinding = useCallback(
-        (
-            matches: UsageMatch[],
-            anchorPos: number,
-            sourceRange: { from: number; to: number },
-        ) => {
+        (matches: UsageMatch[], anchorPos: number, sourceRange: { from: number; to: number }) => {
             const api = editorApiRef.current
             if (!api) return
             const doc = documentStore.getState().documents[docId]

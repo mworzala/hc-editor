@@ -84,7 +84,14 @@ export function clientCapabilities(): Record<string, unknown> {
             },
             documentLink: { dynamicRegistration: false, tooltipSupport: true },
             documentColor: {},
-            diagnostic: { dynamicRegistration: false, relatedDocumentSupport: true },
+            // NOTE: we deliberately do NOT declare `textDocument.diagnostic`
+            // (pull diagnostics). Declaring it causes luau-lsp to stop sending
+            // `textDocument/publishDiagnostics` for open documents, and we
+            // don't issue per-document `textDocument/diagnostic` pulls
+            // ourselves — the result is that nothing ever populates the
+            // problems channel for the active file. Push works for the open
+            // buffer; `workspace.diagnostics.refreshSupport` below still
+            // enables the workspace-wide pull for cross-file invalidations.
             codeAction: {
                 codeActionLiteralSupport: {
                     codeActionKind: {

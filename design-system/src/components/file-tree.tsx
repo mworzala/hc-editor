@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { ChevronRightIcon } from 'lucide-react'
 
-import { FolderFileIcon, FolderOpenFileIcon, UnknownFileIcon } from '../icons'
+import { UnknownFileIcon } from '../icons'
 import { cn } from '../utils'
 
 export type FileTreeNode =
@@ -66,35 +66,38 @@ function Node({
                 {isFolder ? (
                     <ChevronRightIcon
                         className={cn(
-                            'size-3.5 text-muted-foreground transition-transform',
+                            'size-3.5 text-muted-foreground transition-transform duration-200 ease-out',
                             open && 'rotate-90',
                         )}
                     />
-                ) : (
-                    <span className='inline-block size-3.5' />
-                )}
-                {isFolder ? (
-                    open ? (
-                        <FolderOpenFileIcon className='size-3.5' />
-                    ) : (
-                        <FolderFileIcon className='size-3.5' />
-                    )
                 ) : (
                     (node.icon ?? <UnknownFileIcon className='size-3.5' />)
                 )}
                 <span className='truncate'>{node.name}</span>
             </button>
-            {isFolder && open ? (
-                <div role='group' className='flex flex-col gap-0.5'>
-                    {node.children.map((c) => (
-                        <Node
-                            key={c.id}
-                            node={c}
-                            depth={depth + 1}
-                            selectedId={selectedId}
-                            onSelect={onSelect}
-                        />
-                    ))}
+            {isFolder ? (
+                <div
+                    className={cn(
+                        'grid transition-[grid-template-rows] duration-200 ease-out',
+                        open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
+                    )}
+                    aria-hidden={!open}
+                >
+                    {/* min-h-0 is critical — without it the inner content's
+                        intrinsic min-content size forces the 0fr row open. */}
+                    <div className='min-h-0 overflow-hidden'>
+                        <div role='group' className='flex flex-col gap-0.5 pt-0.5'>
+                            {node.children.map((c) => (
+                                <Node
+                                    key={c.id}
+                                    node={c}
+                                    depth={depth + 1}
+                                    selectedId={selectedId}
+                                    onSelect={onSelect}
+                                />
+                            ))}
+                        </div>
+                    </div>
                 </div>
             ) : null}
         </div>

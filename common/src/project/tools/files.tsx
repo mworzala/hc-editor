@@ -2,14 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FilePlusIcon, FilesIcon, Trash2Icon } from 'lucide-react'
 
 import { useV1ProjectFilesDelete, type ProjectFile } from '@hollowcube/api'
-import {
-    Button,
-    cn,
-    FileTree,
-    type FileTreeNode,
-    Input,
-    ScrollArea,
-} from '@hollowcube/design-system'
+import { FileTree, type FileTreeNode, Input, ScrollArea } from '@hollowcube/design-system'
 
 import { listAllLanguageMimes, useLanguages } from '../../editor/languages'
 import { ActionContextMenu, useProjectActions } from '../actions'
@@ -104,7 +97,6 @@ function FilesPane() {
         setCtx({ open: true, x: e.clientX, y: e.clientY, node })
     }, [])
 
-    const handleAddRoot = useCallback(() => setNewFile({ parent: '' }), [])
     const handleCommitNew = useCallback(
         (name: string) => {
             const trimmed = name.trim()
@@ -130,42 +122,41 @@ function FilesPane() {
         [deleteMutation, project.id],
     )
 
+    // Single delegated context-menu handler — covers tree rows AND empty
+    // space below the tree. The previous `e.target === e.currentTarget` check
+    // on the ScrollArea never fired because ScrollArea's inner viewport sits
+    // between the event target and the scroll root.
+    const handleContainerContext = useCallback(
+        (e: React.MouseEvent) => {
+            const treeitem = (e.target as HTMLElement).closest('[role="treeitem"]')
+            if (treeitem) {
+                const button = treeitem.querySelector('button')
+                const name = button?.textContent ?? ''
+                const node = findNodeByName(nodes, name)
+                if (node) {
+                    handleContext(e, node)
+                    return
+                }
+            }
+            handleContext(e, null)
+        },
+        [nodes, handleContext],
+    )
+
     return (
-        <div className='flex h-full flex-col'>
-            <div className='flex items-center justify-between px-2 py-1.5'>
-                <span className='text-muted-foreground text-xs font-medium uppercase tracking-wide'>
-                    Files
-                </span>
-                <Button
-                    variant='ghost'
-                    size='icon-sm'
-                    aria-label='New file at root'
-                    onClick={handleAddRoot}
-                >
-                    <FilePlusIcon />
-                </Button>
-            </div>
+        <div className='flex h-full flex-col pt-1.5'>
             <ScrollArea className='min-h-0 flex-1'>
-                <div
-                    className='px-1 pb-2'
-                    onContextMenu={(e) => {
-                        // Right-click on empty area => root context.
-                        if (e.target === e.currentTarget) handleContext(e, null)
-                    }}
-                >
+                <div className='min-h-full px-1.5 pb-2' onContextMenu={handleContainerContext}>
                     {nodes.length === 0 && !newFile ? (
                         <div className='text-muted-foreground flex items-center justify-center p-6 text-center text-xs'>
                             No files yet. Use the + button or right-click to add one.
                         </div>
                     ) : (
-                        <TreeWithMenus
-                            nodes={nodes}
-                            onSelect={openNode}
-                            onContext={handleContext}
-                        />
+                        <FileTree nodes={nodes} onSelect={openNode} />
                     )}
-                    {newFile && newFile.parent === '' ? (
+                    {newFile ? (
                         <NewFileInput
+                            parent={newFile.parent}
                             onConfirm={handleCommitNew}
                             onCancel={() => setNewFile(null)}
                         />
@@ -219,35 +210,6 @@ function buildFilesContextActions(
     return actions
 }
 
-function TreeWithMenus({
-    nodes,
-    onSelect,
-    onContext,
-}: {
-    nodes: FileTreeNode[]
-    onSelect: (id: string, node: FileTreeNode) => void
-    onContext: (e: React.MouseEvent, node: FileTreeNode) => void
-}) {
-    // The design-system FileTree doesn't have an onContextMenu prop, so we
-    // wrap it in a div with a delegated handler. We use the data-slot attribute
-    // baked into the tree row buttons to identify which node was clicked.
-    return (
-        <div
-            onContextMenu={(e) => {
-                const target = (e.target as HTMLElement).closest('[role="treeitem"]')
-                if (!target) return
-                const button = target.querySelector('button')
-                if (!button) return
-                const name = button.textContent ?? ''
-                const node = findNodeByName(nodes, name)
-                if (node) onContext(e, node)
-            }}
-        >
-            <FileTree nodes={nodes} onSelect={onSelect} />
-        </div>
-    )
-}
-
 // Walk the tree and find the first node whose name matches; OK for now —
 // names are usually unique at any nesting level, and we only use this as a
 // best-effort lookup for the context menu.
@@ -279,24 +241,47 @@ function filePathFromCtx(ctx: CtxMenuState): string | null {
 }
 
 function NewFileInput({
+    parent,
     onConfirm,
     onCancel,
 }: {
+    parent: string
     onConfirm: (name: string) => void
     onCancel: () => void
 }) {
     const [value, setValue] = useState('')
     const inputRef = useRef<HTMLInputElement | null>(null)
+    // When this input mounts after a context-menu "New file…" click, base-ui's
+    // menu fires close-focus restoration right around the same time. That
+    // steals focus from the input and produces a synthetic blur — if we cancel
+    // on every blur, the input unmounts before the user even sees it (the
+    // user's report: "Adding a new file does not work"). Ignore blurs inside a
+    // short grace window after mount and re-focus the input; real user blurs
+    // (clicking elsewhere) happen well after this window.
+    const mountedAtRef = useRef(0)
     useEffect(() => {
+        mountedAtRef.current = performance.now()
         inputRef.current?.focus()
     }, [])
+    const handleBlur = () => {
+        if (performance.now() - mountedAtRef.current < 200) {
+            requestAnimationFrame(() => inputRef.current?.focus())
+            return
+        }
+        onCancel()
+    }
     return (
-        <div className={cn('px-1.5 py-1')}>
+        <div className='px-1.5 py-1'>
+            {parent ? (
+                <div className='text-muted-foreground mb-1 truncate text-[10px] uppercase tracking-wide'>
+                    in {parent}/
+                </div>
+            ) : null}
             <Input
                 ref={inputRef}
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
-                onBlur={() => onCancel()}
+                onBlur={handleBlur}
                 onKeyDown={(e) => {
                     if (e.key === 'Enter') {
                         e.preventDefault()
@@ -306,7 +291,7 @@ function NewFileInput({
                         onCancel()
                     }
                 }}
-                placeholder='file.txt or dir/file.txt'
+                placeholder={parent ? 'file.txt' : 'file.txt or dir/file.txt'}
             />
         </div>
     )

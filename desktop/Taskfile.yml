@@ -5,11 +5,9 @@ includes:
     windows: ./build/windows/Taskfile.yml
     darwin: ./build/darwin/Taskfile.yml
     linux: ./build/linux/Taskfile.yml
-    ios: ./build/ios/Taskfile.yml
-    android: ./build/android/Taskfile.yml
 
 vars:
-    APP_NAME: 'hollowcube-desktop'
+    APP_NAME: 'Hollow Cube'
     BIN_DIR: 'bin'
     VITE_PORT: '{{.WAILS_VITE_PORT | default 9245}}'
 

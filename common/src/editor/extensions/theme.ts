@@ -27,6 +27,7 @@ export function editorTheme(p: EditorPalette) {
             '&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground':
                 {
                     background: 'var(--primary)',
+                    borderRadius: '4px',
                 },
             // Native selection on top of the layer: transparent background so we
             // don't double-paint, white text so syntax colors give way to a

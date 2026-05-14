@@ -94,7 +94,19 @@ export function ActionContextMenu({
     if (!open) return null
     return (
         <DropdownMenu open={open} onOpenChange={onOpenChange}>
-            <DropdownMenuContent anchor={anchor} side='bottom' align='start' className={className}>
+            <DropdownMenuContent
+                anchor={anchor}
+                side='bottom'
+                align='start'
+                className={className}
+                // A context menu is opened at a virtual point (no real
+                // trigger), so base-ui's default "restore focus to whatever
+                // had it before" steals focus away from anything an action's
+                // run() might mount (e.g. the rename-file input the "New
+                // file…" action shows). Opt out — actions that need focus
+                // will grab it themselves.
+                finalFocus={false}
+            >
                 {items.length > 0 ? (
                     items
                 ) : (

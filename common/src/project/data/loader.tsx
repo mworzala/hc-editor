@@ -1,7 +1,8 @@
-import { type ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 import { useV1ProjectGet } from '@hollowcube/api'
 
+import { usePlatform } from '../../platform'
 import { ProjectStateProvider, useProjectState } from '../context'
 
 // API-driven project loader. Fetches the project via the HCClient injected
@@ -29,6 +30,14 @@ type ProjectLoaderProps = {
 
 export function ProjectLoader({ projectId, loading, errored, children }: ProjectLoaderProps) {
     const { data, error, status } = useV1ProjectGet(projectId)
+
+    // Always update the window title to match the project name.
+    const { window } = usePlatform()
+    useEffect(() => {
+        if (data?.name) {
+            window?.setTitle(data.name)
+        }
+    }, [data?.name, window])
 
     if (status === 'pending') {
         return (

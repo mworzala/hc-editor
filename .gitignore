@@ -1,6 +1,6 @@
 node_modules
 dist
-build
+/build
 .DS_Store
 *.log
 .env
@@ -16,6 +16,8 @@ desktop/build/bin
 desktop/build/darwin
 desktop/build/windows
 desktop/build/linux
+desktop/build/ios
+desktop/build/android
 
 # Editor / IDE
 .idea

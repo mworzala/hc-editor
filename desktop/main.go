@@ -28,9 +28,9 @@ func main() {
 	// 'Bind' is a list of Go struct instances. The frontend has access to the methods of these instances.
 	// 'Mac' options tailor the application when running an macOS.
 	app := application.New(application.Options{
-		Name:        "hollowcube-desktop",
+		Name:        "Hollow Cube",
 		Description: "A demo of using raw HTML & CSS",
-		Services: []application.Service{},
+		Services:    []application.Service{},
 		Assets: application.AssetOptions{
 			Handler: application.AssetFileServerFS(assets),
 		},

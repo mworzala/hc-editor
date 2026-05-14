@@ -9,13 +9,21 @@ import {
     type ReactNode,
 } from 'react'
 import { type EditorView } from '@codemirror/view'
+import {
+    AlertCircleIcon,
+    AlertTriangleIcon,
+    CheckIcon,
+    InfoIcon,
+    LightbulbIcon,
+} from 'lucide-react'
+import type { Diagnostic } from 'vscode-languageserver-types'
 
 import {
     useV1ProjectFilesGet,
     useV1ProjectFilesUpdate,
     type ProjectFileBytes,
 } from '@hollowcube/api'
-import { Button, Input, Label } from '@hollowcube/design-system'
+import { Button, cn, Input, Label } from '@hollowcube/design-system'
 
 import { CodeEditor, type CodeEditorApi, type UsageMatch } from '../../editor'
 import { clearActiveEditor, setActiveEditor } from '../../editor/active-editor-registry'
@@ -27,6 +35,7 @@ import {
     type LanguageEditorBinding,
 } from '../../editor/languages'
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
+import { useLuauLsp } from '../../lsp'
 import { type Tab, useWorkspaceContext } from '../../workspace'
 import { useProjectActions } from '../actions'
 import { useProject } from '../context'
@@ -453,7 +462,14 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                         if (effectivePath) void save()
                     }}
                 />
-                {diagnosticCounts.total > 0 ? <DiagnosticBadge counts={diagnosticCounts} /> : null}
+                {language?.createEditorServices && lspUri ? (
+                    <DiagnosticIndicator
+                        counts={diagnosticCounts}
+                        uri={lspUri}
+                        docText={doc.current}
+                        apiRef={editorApiRef}
+                    />
+                ) : null}
             </div>
             {saveError ? (
                 <div className='border-destructive/40 bg-destructive/10 text-destructive m-2 rounded-sm border px-2 py-1 text-xs'>
@@ -501,42 +517,192 @@ function formatError(e: unknown): string {
     return String(e)
 }
 
-function DiagnosticBadge({ counts }: { counts: DiagnosticCounts }) {
+type Severity = 1 | 2 | 3 | 4
+
+function DiagnosticIndicator({
+    counts,
+    uri,
+    docText,
+    apiRef,
+}: {
+    counts: DiagnosticCounts
+    uri: string
+    docText: string
+    apiRef: React.RefObject<CodeEditorApi | null>
+}) {
+    const { client } = useLuauLsp()
+    const [open, setOpen] = useState(false)
+    const diagnostics = useDiagnosticsForUri(client, uri)
+
+    const isClean = counts.total === 0
+
+    // Close on outside click / escape.
+    const containerRef = useRef<HTMLDivElement | null>(null)
+    useEffect(() => {
+        if (!open) return
+        const onPointerDown = (e: PointerEvent) => {
+            const c = containerRef.current
+            if (c && e.target instanceof Node && c.contains(e.target)) return
+            setOpen(false)
+        }
+        const onKey = (e: KeyboardEvent) => {
+            if (e.key === 'Escape') setOpen(false)
+        }
+        window.addEventListener('pointerdown', onPointerDown, true)
+        window.addEventListener('keydown', onKey)
+        return () => {
+            window.removeEventListener('pointerdown', onPointerDown, true)
+            window.removeEventListener('keydown', onKey)
+        }
+    }, [open])
+
+    const handleJump = useCallback(
+        (d: Diagnostic) => {
+            const offset = lspPosToOffset(docText, d.range.start.line, d.range.start.character)
+            apiRef.current?.jumpTo(offset)
+            setOpen(false)
+        },
+        [apiRef, docText],
+    )
+
     return (
-        <div
-            className='border-border bg-popover text-popover-foreground pointer-events-none absolute right-3 top-2 flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.7rem] font-medium shadow-sm'
-            role='status'
-            aria-label={`${counts.total} diagnostics in this file`}
-        >
-            {counts.errors > 0 ? (
-                <span className='flex items-center gap-1'>
-                    <span
-                        className='h-1.5 w-1.5 rounded-full'
-                        style={{ background: 'var(--destructive)' }}
-                    />
-                    {counts.errors}
+        <div ref={containerRef} className='absolute right-3 top-2 z-10 flex flex-col items-end'>
+            {isClean ? (
+                <span
+                    className='border-border bg-popover flex h-7 w-7 items-center justify-center rounded-md border text-emerald-400 shadow-sm'
+                    role='status'
+                    aria-label='No diagnostics'
+                >
+                    <CheckIcon className='size-4' />
                 </span>
-            ) : null}
-            {counts.warnings > 0 ? (
-                <span className='flex items-center gap-1'>
-                    <span className='h-1.5 w-1.5 rounded-full bg-yellow-300' />
-                    {counts.warnings}
-                </span>
-            ) : null}
-            {counts.infos > 0 ? (
-                <span className='flex items-center gap-1'>
-                    <span className='h-1.5 w-1.5 rounded-full bg-sky-300' />
-                    {counts.infos}
-                </span>
-            ) : null}
-            {counts.hints > 0 ? (
-                <span className='text-muted-foreground flex items-center gap-1'>
-                    <span className='h-1.5 w-1.5 rounded-full bg-current' />
-                    {counts.hints}
-                </span>
+            ) : (
+                <button
+                    type='button'
+                    onClick={() => setOpen((o) => !o)}
+                    aria-expanded={open}
+                    aria-label={`${counts.total} diagnostic${counts.total === 1 ? '' : 's'} in this file`}
+                    className={cn(
+                        'border-border bg-popover text-popover-foreground flex items-center gap-1.5 rounded-md border px-2 py-1 text-[0.7rem] font-medium shadow-sm outline-none transition-colors',
+                        'hover:bg-muted/60 focus-visible:ring-3 focus-visible:ring-primary/30',
+                    )}
+                >
+                    {counts.errors > 0 ? (
+                        <span className='flex items-center gap-1'>
+                            <span
+                                className='h-1.5 w-1.5 rounded-full'
+                                style={{ background: 'var(--destructive)' }}
+                            />
+                            {counts.errors}
+                        </span>
+                    ) : null}
+                    {counts.warnings > 0 ? (
+                        <span className='flex items-center gap-1'>
+                            <span className='h-1.5 w-1.5 rounded-full bg-yellow-300' />
+                            {counts.warnings}
+                        </span>
+                    ) : null}
+                    {counts.infos > 0 ? (
+                        <span className='flex items-center gap-1'>
+                            <span className='h-1.5 w-1.5 rounded-full bg-sky-300' />
+                            {counts.infos}
+                        </span>
+                    ) : null}
+                    {counts.hints > 0 ? (
+                        <span className='text-muted-foreground flex items-center gap-1'>
+                            <span className='h-1.5 w-1.5 rounded-full bg-current' />
+                            {counts.hints}
+                        </span>
+                    ) : null}
+                </button>
+            )}
+            {open && diagnostics.length > 0 ? (
+                <DiagnosticList diagnostics={diagnostics} onJump={handleJump} />
             ) : null}
         </div>
     )
+}
+
+function DiagnosticList({
+    diagnostics,
+    onJump,
+}: {
+    diagnostics: readonly Diagnostic[]
+    onJump: (d: Diagnostic) => void
+}) {
+    const sorted = useMemo(() => {
+        return [...diagnostics].sort((a, b) => {
+            const sa = a.severity ?? 1
+            const sb = b.severity ?? 1
+            if (sa !== sb) return sa - sb
+            return a.range.start.line - b.range.start.line
+        })
+    }, [diagnostics])
+    return (
+        <div
+            role='listbox'
+            className='border-border bg-popover text-popover-foreground mt-1 flex max-h-[60vh] w-72 flex-col overflow-y-auto rounded-md border shadow-md'
+        >
+            {sorted.map((d, i) => {
+                const sev = (d.severity ?? 1) as Severity
+                return (
+                    <button
+                        key={i}
+                        type='button'
+                        onClick={() => onJump(d)}
+                        className='hover:bg-muted/60 flex items-start gap-2 px-2 py-1.5 text-left text-xs outline-none transition-colors focus-visible:bg-muted/60'
+                    >
+                        <SeverityIcon severity={sev} />
+                        <span className='flex min-w-0 flex-1 flex-col gap-px'>
+                            <span className='break-words'>{d.message}</span>
+                            <span className='text-muted-foreground text-[0.65rem]'>
+                                {(d.source ?? 'luau') + ' · ln ' + (d.range.start.line + 1)}
+                            </span>
+                        </span>
+                    </button>
+                )
+            })}
+        </div>
+    )
+}
+
+const SEVERITY_CLASS: Record<Severity, string> = {
+    1: 'text-destructive',
+    2: 'text-yellow-300',
+    3: 'text-sky-300',
+    4: 'text-muted-foreground',
+}
+
+function SeverityIcon({ severity }: { severity: Severity }) {
+    const className = cn('h-3 w-3 shrink-0 mt-0.5', SEVERITY_CLASS[severity])
+    switch (severity) {
+        case 1:
+            return <AlertCircleIcon className={className} aria-label='Error' />
+        case 2:
+            return <AlertTriangleIcon className={className} aria-label='Warning' />
+        case 3:
+            return <InfoIcon className={className} aria-label='Info' />
+        case 4:
+            return <LightbulbIcon className={className} aria-label='Hint' />
+    }
+}
+
+function useDiagnosticsForUri(
+    client: ReturnType<typeof useLuauLsp>['client'],
+    uri: string | null,
+): readonly Diagnostic[] {
+    const [diags, setDiags] = useState<readonly Diagnostic[]>([])
+    useEffect(() => {
+        if (!client || !uri) {
+            setDiags([])
+            return
+        }
+        setDiags(client.getDiagnostics(uri))
+        return client.onDiagnostics((u, next) => {
+            if (u !== uri) return
+            setDiags(next)
+        })
+    }, [client, uri])
+    return diags
 }
 
 function SavePathPrompt({

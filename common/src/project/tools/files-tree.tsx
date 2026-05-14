@@ -23,9 +23,31 @@ type BuilderEntry =
     | { kind: 'file'; segments: string[]; id: string; contentType?: string; pending?: boolean }
     | never
 
+export type BuildFileTreeExtras = {
+    /** Paths (project-relative, no leading slash) that should render with the
+     *  "danger" decoration (red underline). Used to surface LSP error
+     *  diagnostics in the file browser. */
+    errorPaths?: ReadonlySet<string>
+    /** When set, inject an inline placeholder row at the end of this folder's
+     *  children. `parent === ''` places it at the root. The host supplies
+     *  `render(depth)` so the row matches the surrounding indentation. */
+    newFile?: {
+        parent: string
+        id: string
+        render: (depth: number) => React.ReactNode
+    }
+    /** When set, replace a file node with the rename row. Keyed by file id
+     *  (the full path for saved files, `pending:<tempId>` for pending). */
+    rename?: {
+        id: string
+        render: (depth: number) => React.ReactNode
+    }
+}
+
 export function buildFileTree(
     files: readonly ProjectFile[],
     pending: readonly PendingFile[] = [],
+    extras: BuildFileTreeExtras = {},
 ): FileTreeNode[] {
     const entries: BuilderEntry[] = []
     for (const f of files) {
@@ -40,10 +62,14 @@ export function buildFileTree(
         entries.push({ kind: 'file', segments, id: `pending:${p.tempId}`, pending: true })
     }
 
-    return assemble(entries, '')
+    return assemble(entries, '', extras)
 }
 
-function assemble(entries: BuilderEntry[], folderPath: string): FileTreeNode[] {
+function assemble(
+    entries: BuilderEntry[],
+    folderPath: string,
+    extras: BuildFileTreeExtras,
+): FileTreeNode[] {
     const folderMap = new Map<string, BuilderEntry[]>()
     const files: FileTreeNode[] = []
 
@@ -51,12 +77,23 @@ function assemble(entries: BuilderEntry[], folderPath: string): FileTreeNode[] {
         const [head, ...rest] = entry.segments
         if (!head) continue
         if (rest.length === 0) {
-            files.push({
-                type: 'file',
-                id: entry.id,
-                name: head,
-                icon: renderFileIcon(head),
-            })
+            if (extras.rename && extras.rename.id === entry.id) {
+                const renamerNode = extras.rename
+                files.push({
+                    type: 'placeholder',
+                    id: `rename:${entry.id}`,
+                    name: head,
+                    render: renamerNode.render,
+                })
+            } else {
+                files.push({
+                    type: 'file',
+                    id: entry.id,
+                    name: head,
+                    icon: renderFileIcon(head),
+                    danger: extras.errorPaths?.has(entry.id) ?? false,
+                })
+            }
             continue
         }
         const list = folderMap.get(head) ?? []
@@ -71,18 +108,39 @@ function assemble(entries: BuilderEntry[], folderPath: string): FileTreeNode[] {
             type: 'folder',
             id: childPath,
             name,
-            children: assemble(childEntries, childPath),
+            children: assemble(childEntries, childPath, extras),
             defaultOpen: true,
         })
     }
 
     folders.sort(byName)
-    files.sort(byName)
-    return [...folders, ...files]
+    files.sort(byNodeName)
+
+    const out: FileTreeNode[] = [...folders, ...files]
+    if (extras.newFile && extras.newFile.parent === folderPath) {
+        const placeholder = extras.newFile
+        out.push({
+            type: 'placeholder',
+            id: `new-file:${placeholder.id}`,
+            render: placeholder.render,
+        })
+    }
+    return out
 }
 
 function byName(a: FileTreeNode, b: FileTreeNode): number {
-    return a.name.localeCompare(b.name)
+    const an = nodeName(a)
+    const bn = nodeName(b)
+    return an.localeCompare(bn)
+}
+
+function byNodeName(a: FileTreeNode, b: FileTreeNode): number {
+    return byName(a, b)
+}
+
+function nodeName(n: FileTreeNode): string {
+    if (n.type === 'placeholder') return n.name ?? n.id
+    return n.name
 }
 
 function splitPath(path: string): string[] {

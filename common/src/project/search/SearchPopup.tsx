@@ -85,8 +85,14 @@ function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
 
     const onKeyDown = useCallback(
         (e: ReactKeyboardEvent<HTMLInputElement>) => {
+            // ArrowUp/ArrowDown drive the result list selection — they must NOT
+            // also move the input's text cursor (or trigger any global hotkey
+            // that happens to be bound to arrow keys). ArrowLeft/ArrowRight
+            // intentionally fall through so the user can still navigate the
+            // query text.
             if (e.key === 'ArrowDown') {
                 e.preventDefault()
+                e.stopPropagation()
                 if (flatItems.length === 0) return
                 const idx = flatItems.findIndex((x) => x.id === activeId)
                 const next = flatItems[(idx + 1) % flatItems.length]
@@ -95,6 +101,7 @@ function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
             }
             if (e.key === 'ArrowUp') {
                 e.preventDefault()
+                e.stopPropagation()
                 if (flatItems.length === 0) return
                 const idx = flatItems.findIndex((x) => x.id === activeId)
                 const next = flatItems[(idx - 1 + flatItems.length) % flatItems.length]
@@ -103,12 +110,14 @@ function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
             }
             if (e.key === 'Enter') {
                 e.preventDefault()
+                e.stopPropagation()
                 const target = flatItems.find((x) => x.id === activeId)
                 if (target) invoke(target)
                 return
             }
             if (e.key === 'Tab') {
                 e.preventDefault()
+                e.stopPropagation()
                 const idx = SEARCH_TABS.findIndex((t) => t.id === tab)
                 const dir = e.shiftKey ? -1 : 1
                 const next = SEARCH_TABS[(idx + dir + SEARCH_TABS.length) % SEARCH_TABS.length]

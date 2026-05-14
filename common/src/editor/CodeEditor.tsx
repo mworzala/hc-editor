@@ -129,6 +129,10 @@ export type CodeEditorApi = {
         anchorPos: number,
         sourceRange: { from: number; to: number },
     ) => void
+    /** Move the cursor to `pos` and center it in the viewport, then focus the
+     *  editor. Used by external UI (diagnostics list, problems panel) to jump
+     *  the user to a location inside this tab. */
+    jumpTo: (pos: number) => void
 }
 
 type UsagesState = {
@@ -547,10 +551,21 @@ function CodeEditor({
         [],
     )
 
+    const jumpToExternal = React.useCallback((pos: number) => {
+        const view = viewRef.current
+        if (!view) return
+        const clamped = Math.max(0, Math.min(pos, view.state.doc.length))
+        view.dispatch({
+            selection: { anchor: clamped },
+            effects: EditorView.scrollIntoView(clamped, { y: 'center' }),
+        })
+        view.focus()
+    }, [])
+
     React.useImperativeHandle(
         apiRef as React.RefObject<CodeEditorApi | null> | undefined,
-        () => ({ showUsages: openUsagesWithMatches }),
-        [openUsagesWithMatches],
+        () => ({ showUsages: openUsagesWithMatches, jumpTo: jumpToExternal }),
+        [openUsagesWithMatches, jumpToExternal],
     )
 
     // Hotkey F7 = open usages for the current selection.

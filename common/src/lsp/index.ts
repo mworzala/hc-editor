@@ -46,5 +46,9 @@ export {
     type ReferenceMatch,
     type ReferencesShowHandler,
 } from './cm/definition'
-export { useDiagnosticCounts, type DiagnosticCounts } from './cm/useDiagnosticCounts'
+export {
+    useDiagnosticCounts,
+    useDiagnosticPaths,
+    type DiagnosticCounts,
+} from './cm/useDiagnosticCounts'
 export { LUAU_LANGUAGE_ID, markdownFromContents } from './protocol'

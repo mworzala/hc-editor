@@ -15,6 +15,7 @@ export function SearchActions() {
     const openAll = useCallback(() => openWith('all'), [openWith])
     const openActions = useCallback(() => openWith('actions'), [openWith])
     const openFiles = useCallback(() => openWith('files'), [openWith])
+    const openSymbols = useCallback(() => openWith('symbols'), [openWith])
     const openText = useCallback(() => openWith('text'), [openWith])
 
     const allAction = useMemo<Action>(
@@ -49,6 +50,17 @@ export function SearchActions() {
         }),
         [openFiles],
     )
+    const symbolsAction = useMemo<Action>(
+        () => ({
+            id: 'search.openSymbols',
+            title: 'Go to Symbol…',
+            group: 'search',
+            keybinding: '$mod+t',
+            contexts: ['global'],
+            run: openSymbols,
+        }),
+        [openSymbols],
+    )
     const textAction = useMemo<Action>(
         () => ({
             id: 'search.openText',
@@ -64,6 +76,7 @@ export function SearchActions() {
     useRegisterAction(allAction)
     useRegisterAction(actionsAction)
     useRegisterAction(filesAction)
+    useRegisterAction(symbolsAction)
     useRegisterAction(textAction)
 
     useDoubleTapKey('Shift', openAll, { windowMs: 350 })

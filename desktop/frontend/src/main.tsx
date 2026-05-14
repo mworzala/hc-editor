@@ -5,7 +5,6 @@ import { routes } from '@generouted/react-router'
 import { AppRoot } from '@hollowcube/common'
 import { createBrowserStorage } from '@hollowcube/common/platform'
 
-import { desktopApiTransport } from './api-bridge'
 import { desktopMenuController } from './menu-bridge'
 
 import '@hollowcube/design-system/globals.css'
@@ -15,7 +14,10 @@ const router = createHashRouter(routes)
 const platform = {
     kind: 'desktop' as const,
     storage: createBrowserStorage(),
-    apiTransport: desktopApiTransport,
+    // Bypass the `wails://` custom-scheme handler — WKURLSchemeHandler drops
+    // HTTP bodies (WebKit bug 192315), so saves came through empty. Hitting
+    // the Go server directly avoids it; the server allows CORS for this app.
+    apiBaseUrl: 'http://127.0.0.1:9127',
     menu: desktopMenuController,
 }
 

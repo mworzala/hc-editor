@@ -11,13 +11,13 @@ export function encodeWildcardPath(path: string): string {
 }
 
 export function projectPath(projectId: string): `/${string}` {
-    return `/projects/${encodeProjectId(projectId)}`
+    return `/v1/projects/${encodeProjectId(projectId)}`
 }
 
 export function projectFilePath(projectId: string, path: string): `/${string}` {
-    return `/projects/${encodeProjectId(projectId)}/files/${encodeWildcardPath(path)}`
+    return `/v1/projects/${encodeProjectId(projectId)}/files/${encodeWildcardPath(path)}`
 }
 
 export function projectEventsPath(projectId: string): `/${string}` {
-    return `/projects/${encodeProjectId(projectId)}/events`
+    return `/v1/projects/${encodeProjectId(projectId)}/events`
 }

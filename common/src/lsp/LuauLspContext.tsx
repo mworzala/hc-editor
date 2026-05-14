@@ -1,9 +1,12 @@
 import { useEffect, useRef, useSyncExternalStore, type ReactNode } from 'react'
 
+import { useDocumentStore } from '../project/documents'
 import { useProjectServices } from '../project/services-context'
+import { createApplyWorkspaceEditHandler } from './applyWorkspaceEdit'
 import { definitionFiles } from './definitionFiles'
 import { docModuleAliases, docModuleLspFiles } from './docModules'
 import { LspClient, type LspState } from './LspClient'
+import { startWorkspaceDiagnosticPolling } from './workspaceDiagnostics'
 
 export type LuauLspContextValue = {
     status: LspState
@@ -18,6 +21,7 @@ const defaultWorkerFactory = (): Worker =>
  *  Must be mounted inside a `ProjectServicesProvider`. */
 export function LuauLspProvider({ children }: { children: ReactNode }) {
     const services = useProjectServices()
+    const documentStore = useDocumentStore()
     const startedRef = useRef(false)
 
     useEffect(() => {
@@ -48,11 +52,13 @@ export function LuauLspProvider({ children }: { children: ReactNode }) {
         })
 
         const instance = new LspClient(worker)
+        instance.setApplyWorkspaceEditHandler(createApplyWorkspaceEditHandler(documentStore))
         services.setLuauClient(instance)
 
         const files = docModuleLspFiles()
         const defFilePaths = definitionFiles.map((f) => f.path)
 
+        let stopWorkspaceDiag: (() => void) | null = null
         void instance
             .start({
                 aliases: docModuleAliases,
@@ -60,18 +66,25 @@ export function LuauLspProvider({ children }: { children: ReactNode }) {
                 definitionFiles: defFilePaths,
                 trace: 'off',
             })
+            .then(() => {
+                if (instance.getState() === 'running') {
+                    stopWorkspaceDiag = startWorkspaceDiagnosticPolling(instance)
+                }
+                return undefined
+            })
             .catch((err) => {
                 console.error('[luau-lsp] start failed', err)
             })
 
         return () => {
             services.setLuauClient(null)
+            stopWorkspaceDiag?.()
             void instance.stop().finally(() => {
                 worker.terminate()
             })
             startedRef.current = false
         }
-    }, [services])
+    }, [documentStore, services])
 
     return <>{children}</>
 }

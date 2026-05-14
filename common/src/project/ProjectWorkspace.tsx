@@ -5,6 +5,8 @@ import { TooltipProvider } from '@hollowcube/design-system'
 
 import { LanguageProvider } from '../editor/languages'
 import { LuauLspProvider } from '../lsp'
+import { LspActions, LspUiOverlay, LspUiProvider } from '../lsp/ui'
+import { usePlatform } from '../platform'
 import {
     makeId,
     resolveTargetLeaf,
@@ -37,6 +39,7 @@ import { TEXT_EDITOR_KIND, textEditor } from './editors/text'
 import { welcomeEditor } from './editors/welcome'
 import { createInitialWorkspaceState } from './initial-state'
 import { LspBufferBridge } from './LspBufferBridge'
+import { LspWatchedFilesBridge } from './LspWatchedFilesBridge'
 import { ProjectTopBar } from './ProjectTopBar'
 import { type AnyEditorDefinition, type ToolDefinition } from './registry'
 import { RegistryProvider, useTabRegistry, useTools } from './registry-context'
@@ -44,13 +47,20 @@ import { SearchActions, SearchPopup } from './search'
 import { ProjectServicesProvider, ServicesActionRegistryAdapter } from './services-context'
 import { filesTool } from './tools/files'
 import { lspLogTool } from './tools/lsp-log'
+import { problemsTool } from './tools/problems'
+import { structureTool } from './tools/structure'
 
 // The project id stays hardcoded until `/:projectId` routing lands. The
 // storage key encodes it, so per-project layout state is naturally isolated.
-const PROJECT_ID = 'demo'
+const PROJECT_ID = 'f973cc98-e806-464d-9435-fc4b1d49fde7'
 const STORAGE_KEY = `hc-project:${PROJECT_ID}:workspace-v2`
 
-const TOOLS: readonly ToolDefinition[] = [filesTool, lspLogTool]
+const TOOLS: readonly ToolDefinition[] = [
+    filesTool,
+    structureTool,
+    problemsTool,
+    lspLogTool,
+]
 const EDITORS: readonly AnyEditorDefinition[] = [
     welcomeEditor,
     apiTestEditor,
@@ -59,9 +69,16 @@ const EDITORS: readonly AnyEditorDefinition[] = [
 ]
 
 export function ProjectWorkspace() {
-    // Single HCClient for the workspace. Both web and desktop proxy `/v1` to
-    // the Go server in dev (see {web,desktop/frontend}/vite.config.ts).
-    const client = useMemo(() => new HCClient({ baseUrl: '/v1' }), [])
+    // Single HCClient for the workspace. The `/v1` prefix is owned by the API
+    // client itself, so baseUrl is just the host root. On web that's empty
+    // (Vite proxies same-origin `/v1` to the Go server). On desktop it's an
+    // absolute URL to bypass the `wails://` scheme handler, which drops
+    // request bodies (WebKit bug 192315).
+    const platform = usePlatform()
+    const client = useMemo(
+        () => new HCClient({ baseUrl: platform.apiBaseUrl ?? '' }),
+        [platform.apiBaseUrl],
+    )
 
     return (
         <HCClientProvider client={client}>
@@ -84,8 +101,11 @@ export function ProjectWorkspace() {
                                             <TooltipProvider>
                                                 <ProjectGate>
                                                     <LuauLspProvider>
-                                                        <LspBufferBridge />
-                                                        <ProjectWorkspaceInner />
+                                                        <LspUiProvider>
+                                                            <LspBufferBridge />
+                                                            <LspWatchedFilesBridge />
+                                                            <ProjectWorkspaceInner />
+                                                        </LspUiProvider>
                                                     </LuauLspProvider>
                                                 </ProjectGate>
                                             </TooltipProvider>
@@ -157,6 +177,7 @@ function ProjectWorkspaceInner() {
                 <NewFileAction useStore={useStore} />
                 <CloseFocusedTabAction useStore={useStore} />
                 <EditorActions useStore={useStore} />
+                <LspActions useStore={useStore} />
                 <SearchActions />
                 <ActionHotkeyBridge />
                 <NativeMenuBridge />
@@ -172,6 +193,7 @@ function ProjectWorkspaceInner() {
                 </div>
                 {tabContextMenu.node}
                 <SearchPopup useStore={useStore} />
+                <LspUiOverlay />
             </div>
         </ActionContextProvider>
     )

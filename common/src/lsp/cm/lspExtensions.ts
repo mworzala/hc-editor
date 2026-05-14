@@ -7,9 +7,11 @@ import {
     type ReferencesShowHandler,
 } from './definition'
 import { lspDiagnostics } from './diagnostics'
+import { lspDocumentLinks } from './documentLinks'
 import { lspFolding } from './folding'
 import { lspHover } from './hover'
 import { lspInlayHints } from './inlayHints'
+import { lspOnTypeFormatting } from './onTypeFormatting'
 import { lspSemanticTokens } from './semanticTokens'
 import { lspSignatureHelp } from './signatureHelp'
 
@@ -45,5 +47,7 @@ export function lspExtensions(opts: LspExtensionsOptions) {
         lspFolding(opts.client, opts.uri),
         lspSemanticTokens(opts.client, opts.uri),
         lspInlayHints(opts.client, opts.uri),
+        lspOnTypeFormatting(opts.client, opts.uri),
+        lspDocumentLinks(opts.client, opts.uri, opts.resolve, opts.onDefinitionOpen),
     ]
 }

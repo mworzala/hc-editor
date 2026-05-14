@@ -167,6 +167,12 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const pending = usePendingFile(payload.tempId)
     const effectivePath = payload.path ?? pending?.path ?? null
 
+    // Pending (tempId) files live entirely client-side until first save — even
+    // when they have a chosen `pending.path`, the path does not yet exist on
+    // the server, so we must not fetch and must not gate the editor on a fetch
+    // result.
+    const isExistingFile = effectivePath !== null && !payload.tempId
+
     const docId = useMemo(() => {
         if (effectivePath) return effectivePath
         if (payload.tempId) return `unsaved:${payload.tempId}`
@@ -174,7 +180,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     }, [effectivePath, payload.tempId, tab.id])
 
     const fileQuery = useV1ProjectFilesGet(project.id, effectivePath ?? '', {
-        enabled: effectivePath !== null && !payload.tempId,
+        enabled: isExistingFile,
         retry: 0,
     })
 
@@ -263,10 +269,10 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const openedRef = useRef(false)
     useEffect(() => {
         if (openedRef.current) return
-        if (effectivePath && !fileQuery.data) return
+        if (isExistingFile && !fileQuery.data) return
         documentStore.getState().openDocument(docId, initialContent)
         openedRef.current = true
-    }, [docId, documentStore, effectivePath, fileQuery.data, initialContent])
+    }, [docId, documentStore, isExistingFile, fileQuery.data, initialContent])
 
     useEffect(() => {
         return () => {
@@ -307,6 +313,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     // changes). A ref forwards the latest `save` closure so the registered
     // entry always sees current state.
     const saveRef = useRef<() => Promise<boolean>>(async () => true)
+    const lspUri = effectivePath ? fileUriFromPath(effectivePath) : undefined
     const onViewChange = useCallback(
         (view: EditorView | null) => {
             if (view) {
@@ -314,12 +321,13 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                     view,
                     language,
                     save: () => saveRef.current(),
+                    lspUri,
                 })
             } else {
                 clearActiveEditor(tab.id)
             }
         },
-        [tab.id, language],
+        [tab.id, language, lspUri],
     )
     useEffect(() => {
         return () => {
@@ -421,10 +429,10 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         saveRef.current = save
     }, [save])
 
-    if (effectivePath && fileQuery.isPending) {
-        return <Status>Loading {basename(effectivePath)}…</Status>
+    if (isExistingFile && fileQuery.isPending) {
+        return <Status>Loading {basename(effectivePath ?? '')}…</Status>
     }
-    if (effectivePath && fileQuery.error) {
+    if (isExistingFile && fileQuery.error) {
         return <Status tone='error'>Failed to load: {String(fileQuery.error)}</Status>
     }
     if (!doc) {

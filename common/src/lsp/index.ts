@@ -1,18 +1,23 @@
 export {
     LspClient,
     flattenWorkspaceEdit,
-    type LspState,
+    type ApplyWorkspaceEditHandler,
+    type DiagnosticsListener,
+    type DynamicRegistration,
+    type FileChangeKind,
     type LspLogLevel,
     type LspLogMessage,
     type LspRpcDirection,
     type LspRpcMessage,
     type LspStartFile,
-    type LspTraceLevel,
     type LspStartOptions,
-    type DiagnosticsListener,
+    type LspState,
+    type LspTraceLevel,
+    type RegistrationsListener,
     type ServerCapabilities,
 } from './LspClient'
 export { LuauLspProvider, useLuauLsp, type LuauLspContextValue } from './LuauLspContext'
+export { createApplyWorkspaceEditHandler } from './applyWorkspaceEdit'
 export {
     docModules,
     docModuleAliases,

@@ -86,8 +86,11 @@ function FilesPane() {
                 setOpenError(`${file.path}: cannot open ${file.contentType} files`)
                 return
             }
+            // Open by editor `kind` directly, not by mime — the text editor
+            // self-describes as `text/*` and the language is resolved inside
+            // the tab via the language registry against the file path.
             openEditor({
-                mimeType: file.contentType,
+                kind: TEXT_EDITOR_KIND,
                 payload: { path: file.path },
                 identityKey: 'path',
                 title: node.name,

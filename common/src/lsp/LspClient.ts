@@ -69,6 +69,16 @@ export type DiagnosticsListener = (uri: string, diagnostics: Diagnostic[]) => vo
 
 export type ApplyWorkspaceEditHandler = (edit: WorkspaceEdit) => boolean | Promise<boolean>
 
+export type FileChangeKind = 'created' | 'changed' | 'deleted'
+
+export type DynamicRegistration = {
+    id: string
+    method: string
+    registerOptions?: unknown
+}
+
+export type RegistrationsListener = (method: string, regs: readonly DynamicRegistration[]) => void
+
 export type ServerCapabilities = {
     semanticTokensProvider?: {
         legend: { tokenTypes: string[]; tokenModifiers: string[] }
@@ -122,6 +132,9 @@ export class LspClient {
     private diagnosticsListeners = new Set<DiagnosticsListener>()
     private latestDiagnostics = new Map<string, Diagnostic[]>()
     private applyWorkspaceEditHandler: ApplyWorkspaceEditHandler | null = null
+    private registrations = new Map<string, DynamicRegistration[]>()
+    private registrationListeners = new Set<RegistrationsListener>()
+    private workspaceDiagRefreshHandlers = new Set<() => void>()
 
     private worker: Worker
 
@@ -228,8 +241,69 @@ export class LspClient {
         return this.latestDiagnostics.get(uri) ?? []
     }
 
+    /** Snapshot of every URI that has at least one diagnostic in the cache.
+     *  Used by the Problems panel to aggregate cross-file errors without
+     *  every consumer hand-rolling its own subscription. */
+    getAllDiagnostics(): Map<string, readonly Diagnostic[]> {
+        const out = new Map<string, readonly Diagnostic[]>()
+        for (const [uri, diags] of this.latestDiagnostics) out.set(uri, diags)
+        return out
+    }
+
+    /** Push a per-URI diagnostic update from outside the publishDiagnostics
+     *  channel (e.g. the workspace-diagnostic pull poller). Behaves
+     *  identically to a server-pushed publishDiagnostics — same cache, same
+     *  listeners. */
+    setDiagnostics(uri: string, diagnostics: readonly Diagnostic[]): void {
+        this.latestDiagnostics.set(uri, [...diagnostics])
+        for (const cb of this.diagnosticsListeners) cb(uri, [...diagnostics])
+    }
+
     setApplyWorkspaceEditHandler(handler: ApplyWorkspaceEditHandler | null): void {
         this.applyWorkspaceEditHandler = handler
+    }
+
+    /** Apply a client-originated `WorkspaceEdit` (e.g. result of rename or a
+     *  code action). Routes through the same handler the server uses for
+     *  `workspace/applyEdit`. Returns `true` on success. */
+    applyWorkspaceEdit(edit: WorkspaceEdit): Promise<boolean> {
+        return this.dispatchWorkspaceEdit(edit)
+    }
+
+    /** Snapshot of dynamic registrations for `method`. Empty when nothing has
+     *  been registered. */
+    getRegistrations(method: string): readonly DynamicRegistration[] {
+        return this.registrations.get(method) ?? []
+    }
+
+    /** Subscribe to changes in the registration table for any method. */
+    onRegistrations(cb: RegistrationsListener): () => void {
+        this.registrationListeners.add(cb)
+        return () => {
+            this.registrationListeners.delete(cb)
+        }
+    }
+
+    /** Forward a file event to the server. Filters by registered glob
+     *  patterns when the server has registered watchers; if no registrations
+     *  exist, the notification is dropped (the server hasn't asked to be
+     *  notified). */
+    didChangeWatchedFiles(events: { uri: string; type: 1 | 2 | 3 }[]): void {
+        if (events.length === 0) return
+        const regs = this.registrations.get('workspace/didChangeWatchedFiles') ?? []
+        if (regs.length === 0) return
+        const filtered = events.filter((e) => watchedByAnyRegistration(e.uri, regs))
+        if (filtered.length === 0) return
+        this.notify('workspace/didChangeWatchedFiles', { changes: filtered })
+    }
+
+    /** Listener fires when the server sends `workspace/diagnostic/refresh`,
+     *  meaning the workspace-diagnostic-pull should be re-issued. */
+    onWorkspaceDiagnosticRefresh(cb: () => void): () => void {
+        this.workspaceDiagRefreshHandlers.add(cb)
+        return () => {
+            this.workspaceDiagRefreshHandlers.delete(cb)
+        }
     }
 
     async start(options: LspStartOptions = {}): Promise<void> {
@@ -477,6 +551,65 @@ export class LspClient {
                     })
                     return
                 }
+                case 'workspace/diagnostic/refresh': {
+                    // Server request — expects null result. Forward to the
+                    // workspace-diagnostic poller so it re-issues the pull.
+                    for (const cb of this.workspaceDiagRefreshHandlers) cb()
+                    this.sendToWorker(
+                        { jsonrpc: '2.0', id, result: null },
+                        'response',
+                        'workspace/diagnostic/refresh',
+                    )
+                    return
+                }
+                case 'client/registerCapability': {
+                    const params = msg.params as {
+                        registrations: {
+                            id: string
+                            method: string
+                            registerOptions?: unknown
+                        }[]
+                    }
+                    const touchedMethods = new Set<string>()
+                    for (const reg of params?.registrations ?? []) {
+                        const list = this.registrations.get(reg.method) ?? []
+                        list.push({
+                            id: reg.id,
+                            method: reg.method,
+                            registerOptions: reg.registerOptions,
+                        })
+                        this.registrations.set(reg.method, list)
+                        touchedMethods.add(reg.method)
+                    }
+                    this.sendToWorker(
+                        { jsonrpc: '2.0', id, result: null },
+                        'response',
+                        'client/registerCapability',
+                    )
+                    for (const m of touchedMethods) this.emitRegistrations(m)
+                    return
+                }
+                case 'client/unregisterCapability': {
+                    const params = msg.params as {
+                        unregisterations: { id: string; method: string }[]
+                    }
+                    const touchedMethods = new Set<string>()
+                    for (const unreg of params?.unregisterations ?? []) {
+                        const list = this.registrations.get(unreg.method)
+                        if (!list) continue
+                        const filtered = list.filter((r) => r.id !== unreg.id)
+                        if (filtered.length === 0) this.registrations.delete(unreg.method)
+                        else this.registrations.set(unreg.method, filtered)
+                        touchedMethods.add(unreg.method)
+                    }
+                    this.sendToWorker(
+                        { jsonrpc: '2.0', id, result: null },
+                        'response',
+                        'client/unregisterCapability',
+                    )
+                    for (const m of touchedMethods) this.emitRegistrations(m)
+                    return
+                }
                 default:
                     if (SERVER_REQUESTS_TO_NULL_OUT.has(msg.method)) {
                         this.sendToWorker(
@@ -517,6 +650,11 @@ export class LspClient {
         return cur
     }
 
+    private emitRegistrations(method: string): void {
+        const regs = this.registrations.get(method) ?? []
+        for (const cb of this.registrationListeners) cb(method, regs)
+    }
+
     private async dispatchWorkspaceEdit(edit: WorkspaceEdit): Promise<boolean> {
         if (!edit) return false
         if (!this.applyWorkspaceEditHandler) return false
@@ -527,6 +665,72 @@ export class LspClient {
             return false
         }
     }
+}
+
+/** True when at least one registration's glob pattern + kind mask accepts the
+ *  uri. Patterns are LSP `RelativePattern | string` shapes; we treat both as
+ *  the glob string. `kind` defaults to 7 (create|change|delete) when omitted. */
+function watchedByAnyRegistration(
+    uri: string,
+    regs: readonly DynamicRegistration[],
+): boolean {
+    for (const reg of regs) {
+        const opts = reg.registerOptions as
+            | { watchers?: { globPattern: unknown; kind?: number }[] }
+            | undefined
+        const watchers = opts?.watchers
+        if (!watchers || watchers.length === 0) {
+            // No filter set -> server takes everything.
+            return true
+        }
+        for (const w of watchers) {
+            const glob = typeof w.globPattern === 'string'
+                ? w.globPattern
+                : ((w.globPattern as { pattern?: string })?.pattern ?? '')
+            if (!glob) continue
+            if (matchGlob(uri, glob)) return true
+        }
+    }
+    return false
+}
+
+/** Lightweight glob matcher covering the subset luau-lsp uses: `*` (any chars
+ *  not `/`), `**` (any path), `?` (single char), and char classes `[abc]`.
+ *  Anchored to the full string. */
+function matchGlob(input: string, glob: string): boolean {
+    const re = globToRegex(glob)
+    return re.test(input)
+}
+
+function globToRegex(glob: string): RegExp {
+    let out = '^'
+    for (let i = 0; i < glob.length; i++) {
+        const c = glob[i]!
+        if (c === '*') {
+            if (glob[i + 1] === '*') {
+                out += '.*'
+                i++
+            } else {
+                out += '[^/]*'
+            }
+        } else if (c === '?') {
+            out += '[^/]'
+        } else if (c === '[') {
+            const close = glob.indexOf(']', i)
+            if (close === -1) {
+                out += '\\['
+            } else {
+                out += '[' + glob.slice(i + 1, close) + ']'
+                i = close
+            }
+        } else if ('.+^$()|{}\\'.includes(c)) {
+            out += '\\' + c
+        } else {
+            out += c
+        }
+    }
+    out += '$'
+    return new RegExp(out)
 }
 
 /** Helper: collect all { uri, edits } pairs from a WorkspaceEdit. */

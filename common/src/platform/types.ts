@@ -1,5 +1,3 @@
-import type { HCTransport } from '@hollowcube/api'
-
 export type Storage = {
     get(key: string): string | null
     set(key: string, value: string): void
@@ -60,17 +58,18 @@ export type MenuController = {
 export type Platform = {
     kind: PlatformKind
     storage: Storage
+    /** Absolute base URL for the API host (no trailing slash, no `/v1`). Used
+     *  on desktop to bypass the Wails `wails://` custom-scheme handler, which
+     *  drops HTTP bodies (WebKit bug 192315) — XHR/fetch must hit the Go
+     *  server directly. Web leaves this undefined and uses same-origin URLs
+     *  through the Vite proxy. */
+    apiBaseUrl?: string
     /** Filesystem access — desktop only. */
     fs?: FileSystem
     /** Native dialogs — desktop only. */
     dialogs?: Dialogs
     /** Native window controls — desktop only. */
     window?: WindowControls
-    /** Transport for non-safe API methods (PUT/DELETE/PATCH). Set on desktop
-     *  to route through a Go bridge that avoids the WKWebView body-drop bug
-     *  and can mirror writes to the local filesystem. Undefined on web — the
-     *  client falls back to its built-in XHR shim. */
-    apiTransport?: HCTransport
     /** Native menu bridge — desktop only. */
     menu?: MenuController
 }

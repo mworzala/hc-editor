@@ -18,8 +18,6 @@ export const LUAU_LANGUAGE_ID = 'luau'
 
 export const SERVER_REQUESTS_TO_NULL_OUT = new Set<string>([
     'window/workDoneProgress/create',
-    'client/registerCapability',
-    'client/unregisterCapability',
 ])
 
 export const LSP_SEVERITY = {
@@ -80,9 +78,13 @@ export function clientCapabilities(): Record<string, unknown> {
             definition: { linkSupport: true },
             typeDefinition: { linkSupport: true },
             references: {},
-            documentSymbol: { hierarchicalDocumentSymbolSupport: true },
-            documentLink: { tooltipSupport: false },
+            documentSymbol: {
+                dynamicRegistration: false,
+                hierarchicalDocumentSymbolSupport: true,
+            },
+            documentLink: { dynamicRegistration: false, tooltipSupport: true },
             documentColor: {},
+            diagnostic: { dynamicRegistration: false, relatedDocumentSupport: true },
             codeAction: {
                 codeActionLiteralSupport: {
                     codeActionKind: {
@@ -156,6 +158,12 @@ export function clientCapabilities(): Record<string, unknown> {
             applyEdit: true,
             configuration: true,
             executeCommand: { dynamicRegistration: false },
+            symbol: {
+                dynamicRegistration: false,
+                resolveSupport: { properties: ['location.range'] },
+            },
+            didChangeWatchedFiles: { dynamicRegistration: true },
+            diagnostics: { refreshSupport: true },
         },
     }
 }

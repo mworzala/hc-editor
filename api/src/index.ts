@@ -7,8 +7,6 @@ export {
     type HCClientOptions,
     type HCMethod,
     type HCRequestOptions,
-    type HCTransport,
-    type HCTransportInit,
 } from './client'
 
 export { HCClientProvider, useHCClient } from './provider'

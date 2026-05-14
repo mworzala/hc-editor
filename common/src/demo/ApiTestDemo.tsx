@@ -20,14 +20,11 @@ import { Badge, Button, Input, Label, ScrollArea, Textarea } from '@hollowcube/d
 import { usePlatform } from '../platform'
 
 export function ApiTestDemo() {
-    const [baseUrl, setBaseUrl] = useState('/v1')
-    const [projectId, setProjectId] = useState('demo')
     const platform = usePlatform()
+    const [baseUrl, setBaseUrl] = useState(platform.apiBaseUrl ?? '')
+    const [projectId, setProjectId] = useState('demo')
 
-    const client = useMemo(
-        () => new HCClient({ baseUrl, sendUnsafe: platform.apiTransport }),
-        [baseUrl, platform.apiTransport],
-    )
+    const client = useMemo(() => new HCClient({ baseUrl }), [baseUrl])
     const queryClient = useMemo(() => new QueryClient(), [])
 
     return (

@@ -1,15 +1,17 @@
 import type { ReactNode } from 'react'
+import type { SymbolKind } from 'vscode-languageserver-types'
 
 import type { ProjectFile } from '@hollowcube/api'
 
 import type { Action } from '../actions/types'
 
-export type SearchTab = 'all' | 'actions' | 'files' | 'text'
+export type SearchTab = 'all' | 'actions' | 'files' | 'text' | 'symbols'
 
 export const SEARCH_TABS: readonly { id: SearchTab; label: string }[] = [
     { id: 'all', label: 'All' },
     { id: 'actions', label: 'Actions' },
     { id: 'files', label: 'Files' },
+    { id: 'symbols', label: 'Symbols' },
     { id: 'text', label: 'Text Search' },
 ] as const
 
@@ -45,6 +47,23 @@ export type SearchResult =
           matches: number[]
           score: number
           data: { path: string; line: number; column: number; snippet: string }
+      }
+    | {
+          kind: 'symbol'
+          id: string
+          title: string
+          subtitle?: string
+          matches: number[]
+          score: number
+          data: {
+              name: string
+              containerName?: string
+              symbolKind: SymbolKind
+              path: string
+              /** 1-based line / 0-based column inside the target file. */
+              line: number
+              column: number
+          }
       }
 
 export type ResultGroup = {

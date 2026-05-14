@@ -6,7 +6,7 @@ import {
     type KeyboardEvent as ReactKeyboardEvent,
     type ReactNode,
 } from 'react'
-import { FileIcon } from 'lucide-react'
+import { FileIcon, ListTreeIcon } from 'lucide-react'
 
 import {
     cn,
@@ -26,6 +26,7 @@ import { isTextContentType } from '../tools/files-tree'
 import { useSearchStore } from './search-store'
 import { useActionResults } from './sources/actions'
 import { useFileResults } from './sources/files'
+import { useWorkspaceSymbolResults } from './sources/symbols'
 import { useTextSearchResults } from './sources/text'
 import { SEARCH_TABS, type ResultGroup, type SearchResult, type SearchTab } from './types'
 
@@ -321,6 +322,7 @@ function HighlightedText({ text, matches }: { text: string; matches: readonly nu
 function resultIcon(item: SearchResult) {
     if (item.kind === 'action' && item.icon) return item.icon
     if (item.kind === 'file') return <FileIcon />
+    if (item.kind === 'symbol') return <ListTreeIcon />
     return null
 }
 
@@ -340,6 +342,11 @@ function useResults(
 } {
     const actions = useActionResults(query, tab === 'all' ? 5 : 50)
     const files = useFileResults(query, tab === 'all' ? 5 : 50)
+    // Workspace symbols query the LSP — only fire when the symbol tab is
+    // active or All is selected, otherwise the user pays for the round-trip
+    // while filtering Actions / Files.
+    const symbolsActive = tab === 'symbols' || tab === 'all'
+    const symbols = useWorkspaceSymbolResults(symbolsActive ? query : '')
     // Only run the text scan when the tab actually shows text results.
     // Otherwise pass an empty query so the hook stays idle and doesn't
     // hammer the network as the user filters Actions / Files.
@@ -353,6 +360,9 @@ function useResults(
         if (tab === 'files') {
             return [{ kind: 'file', label: 'Files', items: files }]
         }
+        if (tab === 'symbols') {
+            return [{ kind: 'symbol', label: 'Symbols', items: symbols }]
+        }
         if (tab === 'text') {
             return [{ kind: 'text', label: 'Text', items: textState.results }]
         }
@@ -360,9 +370,10 @@ function useResults(
         return [
             { kind: 'action', label: 'Actions', items: actions },
             { kind: 'file', label: 'Files', items: files },
+            { kind: 'symbol', label: 'Symbols', items: symbols.slice(0, 5) },
             { kind: 'text', label: 'Text', items: textState.results.slice(0, 5) },
         ]
-    }, [tab, actions, files, textState.results])
+    }, [tab, actions, files, symbols, textState.results])
 
     return { groups, textState }
 }
@@ -441,6 +452,25 @@ function useInvoke(close: () => void, useStore: WorkspaceStoreHook) {
                     close()
                     return
                 }
+                case 'symbol': {
+                    const sym = result.data
+                    openEditor({
+                        mimeType: 'text/plain',
+                        payload: {
+                            path: sym.path,
+                            scrollToLine: sym.line,
+                            flashLspRange: {
+                                startLine: sym.line - 1,
+                                startCharacter: sym.column,
+                                endLine: sym.line - 1,
+                                endCharacter: sym.column + sym.name.length,
+                            },
+                        },
+                        identityKey: 'path',
+                    })
+                    close()
+                    return
+                }
             }
         },
         [close, openEditor, runAction, languageMimes],
@@ -455,6 +485,8 @@ function placeholderFor(tab: SearchTab): string {
             return 'Find action…'
         case 'files':
             return 'Go to file…'
+        case 'symbols':
+            return 'Go to symbol…'
         case 'text':
             return 'Search in files…'
     }

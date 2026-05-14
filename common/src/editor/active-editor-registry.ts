@@ -20,6 +20,10 @@ export type ActiveEditorEntry = {
      *  successful save, false (or throws) if the save was cancelled or
      *  errored. */
     save?: () => Promise<boolean>
+    /** LSP URI for this tab when an LSP binding is active. Lets globally-bound
+     *  LSP actions (`editor.codeAction`, `editor.rename`, …) route the right
+     *  request without re-deriving the URI from the workspace store. */
+    lspUri?: string
 }
 
 const registry = new Map<string, ActiveEditorEntry>()

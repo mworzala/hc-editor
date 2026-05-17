@@ -1,13 +1,13 @@
 import { useCallback, useMemo } from 'react'
 
-import { HCClient, HCClientProvider, useHCClient } from '@hollowcube/api'
+import { HCClientProvider, useHCClient } from '@hollowcube/api'
 import { TooltipProvider } from '@hollowcube/design-system'
 
+import { AuthGate, useAuth } from '../auth'
 import { LanguageProvider } from '../editor/languages'
 import { EngineApiProvider } from '../engine-api'
 import { LuauLspProvider } from '../lsp'
 import { LspActions, LspUiOverlay, LspUiProvider } from '../lsp/ui'
-import { usePlatform } from '../platform'
 import {
     makeId,
     resolveTargetLeaf,
@@ -65,57 +65,55 @@ const EDITORS: readonly AnyEditorDefinition[] = [
 ]
 
 export function ProjectWorkspace() {
-    // Single HCClient for the workspace. The `/v1` prefix is owned by the API
-    // client itself, so baseUrl is just the host root. On web that's empty
-    // (Vite proxies same-origin `/v1` to the Go server). On desktop it's an
-    // absolute URL to bypass the `wails://` scheme handler, which drops
-    // request bodies (WebKit bug 192315).
-    const platform = usePlatform()
-    const client = useMemo(
-        () => new HCClient({ baseUrl: platform.apiBaseUrl ?? '' }),
-        [platform.apiBaseUrl],
-    )
+    // The HCClient is owned by <AuthProvider> (constructed with the DPoP auth
+    // hook). The `/v1` prefix is owned by the API client; baseUrl is just the
+    // host root — empty on web (Vite proxies same-origin `/v1`), absolute on
+    // desktop to bypass the `wails://` scheme handler (WebKit bug 192315).
+    // <AuthGate> blocks this subtree until an authenticated session exists.
+    const { client } = useAuth()
 
     return (
-        <HCClientProvider client={client}>
-            <ProjectLoader
-                projectId={PROJECT_ID}
-                loading={<StatusScreen tone='muted'>Loading project…</StatusScreen>}
-                errored={(err) => (
-                    <StatusScreen tone='error'>
-                        Failed to load project: {formatErr(err)}
-                    </StatusScreen>
-                )}
-            >
-                <RegistryProvider tools={TOOLS} editors={EDITORS}>
-                    <EngineApiProvider>
-                        <LanguageProvider>
-                            <DocumentStoreProvider>
-                                <PendingFilesProvider>
-                                    <ProjectEventsProvider projectId={PROJECT_ID}>
-                                        <ProjectServicesProvider>
-                                            <ServicesActionRegistryAdapter>
-                                                <TooltipProvider>
-                                                    <ProjectGate>
-                                                        <LuauLspProvider>
-                                                            <LspUiProvider>
-                                                                <LspBufferBridge />
-                                                                <LspWatchedFilesBridge />
-                                                                <ProjectWorkspaceInner />
-                                                            </LspUiProvider>
-                                                        </LuauLspProvider>
-                                                    </ProjectGate>
-                                                </TooltipProvider>
-                                            </ServicesActionRegistryAdapter>
-                                        </ProjectServicesProvider>
-                                    </ProjectEventsProvider>
-                                </PendingFilesProvider>
-                            </DocumentStoreProvider>
-                        </LanguageProvider>
-                    </EngineApiProvider>
-                </RegistryProvider>
-            </ProjectLoader>
-        </HCClientProvider>
+        <AuthGate>
+            <HCClientProvider client={client}>
+                <ProjectLoader
+                    projectId={PROJECT_ID}
+                    loading={<StatusScreen tone='muted'>Loading project…</StatusScreen>}
+                    errored={(err) => (
+                        <StatusScreen tone='error'>
+                            Failed to load project: {formatErr(err)}
+                        </StatusScreen>
+                    )}
+                >
+                    <RegistryProvider tools={TOOLS} editors={EDITORS}>
+                        <EngineApiProvider>
+                            <LanguageProvider>
+                                <DocumentStoreProvider>
+                                    <PendingFilesProvider>
+                                        <ProjectEventsProvider projectId={PROJECT_ID}>
+                                            <ProjectServicesProvider>
+                                                <ServicesActionRegistryAdapter>
+                                                    <TooltipProvider>
+                                                        <ProjectGate>
+                                                            <LuauLspProvider>
+                                                                <LspUiProvider>
+                                                                    <LspBufferBridge />
+                                                                    <LspWatchedFilesBridge />
+                                                                    <ProjectWorkspaceInner />
+                                                                </LspUiProvider>
+                                                            </LuauLspProvider>
+                                                        </ProjectGate>
+                                                    </TooltipProvider>
+                                                </ServicesActionRegistryAdapter>
+                                            </ProjectServicesProvider>
+                                        </ProjectEventsProvider>
+                                    </PendingFilesProvider>
+                                </DocumentStoreProvider>
+                            </LanguageProvider>
+                        </EngineApiProvider>
+                    </RegistryProvider>
+                </ProjectLoader>
+            </HCClientProvider>
+        </AuthGate>
     )
 }
 

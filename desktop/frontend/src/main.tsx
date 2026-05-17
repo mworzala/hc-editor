@@ -21,11 +21,15 @@ const platform = {
         toggleFullScreen: Window.ToggleFullscreen,
         close: Window.Close,
     } satisfies WindowControls,
-    // Bypass the `wails://` custom-scheme handler — WKURLSchemeHandler drops
-    // HTTP bodies (WebKit bug 192315), so saves came through empty. Hitting
-    // the Go server directly avoids it; the server allows CORS for this app.
-    apiBaseUrl: 'http://127.0.0.1:9127',
+    // Absolute URL to Envoy: also bypasses the `wails://` custom-scheme
+    // handler (WKURLSchemeHandler drops HTTP bodies — WebKit bug 192315). The
+    // request origin == the DPoP `htu` the backend reconstructs.
+    apiBaseUrl: 'http://localhost:10000',
     menu: desktopMenuController,
+    // No `launchCode` source in Phase 1: desktop uses hash routing (reading
+    // `location.hash` would collide with the router) and the web→native
+    // handoff is Phase 2 — a Wails deep-link event will supply a
+    // LaunchCodeSource here then.
 }
 
 createRoot(document.getElementById('root')!).render(

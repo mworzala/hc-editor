@@ -2,6 +2,7 @@ import { StrictMode, type ReactNode } from 'react'
 import { HotkeysProvider } from '@tanstack/react-hotkeys'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
+import { AuthProvider } from './auth'
 import { QueryDevtoolsToggle } from './dev'
 import { PlatformProvider, type Platform } from './platform'
 import { AppErrorBoundary } from './project'
@@ -33,12 +34,14 @@ export function AppRoot({ platform, queryClient, children, devTools = false }: A
         <StrictMode>
             <AppErrorBoundary>
                 <PlatformProvider platform={platform}>
-                    <QueryClientProvider client={client}>
-                        <HotkeysProvider>
-                            {children}
-                            {devTools ? <QueryDevtoolsToggle /> : null}
-                        </HotkeysProvider>
-                    </QueryClientProvider>
+                    <AuthProvider>
+                        <QueryClientProvider client={client}>
+                            <HotkeysProvider>
+                                {children}
+                                {devTools ? <QueryDevtoolsToggle /> : null}
+                            </HotkeysProvider>
+                        </QueryClientProvider>
+                    </AuthProvider>
                 </PlatformProvider>
             </AppErrorBoundary>
         </StrictMode>

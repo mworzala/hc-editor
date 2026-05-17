@@ -3,6 +3,8 @@ export {
     HCV1Client,
     HCV1ProjectClient,
     HCV1ProjectFilesClient,
+    canonicalHtu,
+    type HCAuthHook,
     type HCClientLike,
     type HCClientOptions,
     type HCMethod,
@@ -67,3 +69,20 @@ export {
     type ProjectEventEnvelope,
     type V1ProjectEventsOptions,
 } from './endpoints/v1-project-events'
+
+export {
+    AccountMetaSchema,
+    v1AuthRedeem,
+    V1AuthRedeemResponseSchema,
+    type AccountMeta,
+    type ClientKind,
+    type V1AuthRedeemRequest,
+    type V1AuthRedeemResponse,
+} from './endpoints/v1-auth-redeem'
+
+export {
+    v1AuthToken,
+    V1AuthTokenResponseSchema,
+    type V1AuthTokenRequest,
+    type V1AuthTokenResponse,
+} from './endpoints/v1-auth-token'

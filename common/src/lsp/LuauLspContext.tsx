@@ -5,7 +5,12 @@ import { useDocumentStore } from '../project/documents'
 import { useProjectServices } from '../project/services-context'
 import { createApplyWorkspaceEditHandler } from './applyWorkspaceEdit'
 import { definitionFiles } from './definitionFiles'
-import { applyEngineApiModules, docModuleAliases, docModuleLspFiles, docModules } from './docModules'
+import {
+    applyEngineApiModules,
+    docModuleAliases,
+    docModuleLspFiles,
+    docModules,
+} from './docModules'
 import { loadLuauFFlags } from './fflags'
 import { LspClient, type LspState } from './LspClient'
 import { startWorkspaceDiagnosticPolling } from './workspaceDiagnostics'

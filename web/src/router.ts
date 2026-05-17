@@ -3,15 +3,9 @@
 
 import { components, hooks, utils } from '@generouted/react-router/client'
 
-export type Path =
-  | `/`
-  | `/ds`
-  | `/editor`
-  | `/playground`
+export type Path = `/` | `/ds` | `/editor` | `/playground`
 
-export type Params = {
-  
-}
+export type Params = {}
 
 export type ModalPath = never
 

@@ -1,6 +1,8 @@
 export {
+    type ClientKeyStore,
     type Dialogs,
     type FileSystem,
+    type LaunchCodeSource,
     type MenuController,
     type Platform,
     type PlatformKind,

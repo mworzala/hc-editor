@@ -65,6 +65,32 @@ export type MenuController = {
     onInvoke: (handler: (actionId: string) => void) => () => void
 }
 
+/** Persistent client keypair store. Phase 1 default (both platforms) is a
+ *  WebCrypto/IndexedDB impl living in `../auth`. The seam exists so Phase 2
+ *  desktop can inject an OS-keychain / Secure-Enclave backed impl without the
+ *  auth module runtime-detecting Wails. */
+export type ClientKeyStore = {
+    /** Return the persistent client keypair, generating + persisting one on
+     *  first use. The private key is non-extractable. */
+    getOrCreate(): Promise<CryptoKeyPair>
+    /** Public key as a JWK with no private fields — sent as
+     *  `client_public_key` on first redeem and embedded in every DPoP proof
+     *  header. */
+    exportPublicJwk(): Promise<JsonWebKey>
+    /** RFC 7638 SHA-256 JWK thumbprint, base64url no padding. Equals the
+     *  backend `client.key_id`. */
+    thumbprint(): Promise<string>
+}
+
+/** Where the launch code comes from. Web reads (and strips) `location.hash`.
+ *  Desktop has no source in Phase 1 (handoff is Phase 2 — a Wails deep-link
+ *  event will provide one). Absence means "no pending launch code". */
+export type LaunchCodeSource = {
+    /** Read and consume the pending launch code, if any. Single-use:
+     *  implementations strip it from their source so a reload can't replay. */
+    take(): Promise<string | null>
+}
+
 export type Platform = {
     kind: PlatformKind
     storage: Storage
@@ -82,4 +108,10 @@ export type Platform = {
     window?: WindowControls
     /** Native menu bridge — desktop only. */
     menu?: MenuController
+    /** Client keypair store. Defaults to the WebCrypto/IndexedDB impl in
+     *  `../auth` when absent (Phase 1, both platforms). */
+    keyStore?: ClientKeyStore
+    /** Pending launch-code source. Web injects a `location.hash` reader;
+     *  desktop leaves this absent until Phase 2 (Wails deep link). */
+    launchCode?: LaunchCodeSource
 }

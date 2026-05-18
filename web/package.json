@@ -7,7 +7,7 @@
         "dev": "vite",
         "build": "tsc && vite build",
         "preview": "vite preview",
-        "deploy": "wrangler deploy -c ./dist/wrangler.json",
+        "deploy": "wrangler deploy -c ./dist/*/wrangler.json",
         "typecheck": "tsc --noEmit"
     },
     "dependencies": {

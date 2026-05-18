@@ -2,12 +2,16 @@
     "$schema": "node_modules/wrangler/config-schema.json",
     "name": "script-editor",
     "compatibility_date": "2026-05-17",
-    // Pure SPA: no Worker entry (`main`). The Cloudflare Vite plugin builds
-    // the client and points the assets binding at the build output, so
-    // `directory` is intentionally omitted here. `single-page-application`
-    // makes deep links (generouted browser-history routes) fall back to
-    // index.html instead of 404ing.
+    "main": "./worker/index.ts",
+    // The app is served under `/editor`. A CF route only decides which
+    // requests reach this Worker; it does not strip the prefix. The Worker
+    // (./worker/index.ts) strips `/editor` and serves the Vite client build
+    // through the ASSETS binding. `single-page-application` makes
+    // `env.ASSETS.fetch` fall back to index.html for client-side routes once
+    // the prefix is stripped. The Cloudflare Vite plugin points the assets
+    // dir at the build output, so `directory` is intentionally omitted.
     "assets": {
+        "binding": "ASSETS",
         "not_found_handling": "single-page-application",
     },
 }

@@ -91,26 +91,24 @@ describe('HCClient — STAB-2 transient retry', () => {
     })
 })
 
-describe('HCClient — STAB-1 request timeout', () => {
-    // A fetch that never settles unless its signal aborts — models a stalled
-    // connection against real infra.
-    const stalled: FetchLike = (_url, init) =>
-        new Promise((_resolve, reject) => {
-            const signal = init?.signal
-            const fail = () => reject(signal?.reason ?? new DOMException('aborted', 'AbortError'))
-            // Mirror real fetch: reject synchronously if already aborted.
-            if (signal?.aborted) {
-                fail()
-                return
-            }
-            signal?.addEventListener('abort', fail)
-        })
+// A fetch that never settles unless its signal aborts — models a stalled
+// connection against real infra.
+const stalled: FetchLike = (_url, init) =>
+    new Promise((_resolve, reject) => {
+        const signal = init?.signal
+        const fail = () => reject(signal?.reason ?? new DOMException('aborted', 'AbortError'))
+        // Mirror real fetch: reject synchronously if already aborted.
+        if (signal?.aborted) {
+            fail()
+            return
+        }
+        signal?.addEventListener('abort', fail)
+    })
 
+describe('HCClient — STAB-1 request timeout', () => {
     test('a stalled request fails with a flagged timeout ApiError', async () => {
         const client = makeClient(stalled)
-        const err = await client
-            .send('GET', '/x', { timeoutMs: 20, retry: false })
-            .catch((e) => e)
+        const err = await client.send('GET', '/x', { timeoutMs: 20, retry: false }).catch((e) => e)
         expect(err).toBeInstanceOf(ApiError)
         expect((err as ApiError).status).toBe(0)
         expect((err as ApiError).timedOut).toBe(true)

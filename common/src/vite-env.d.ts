@@ -18,3 +18,7 @@ declare module '*.wasm?url' {
     const src: string
     export default src
 }
+
+// Side-effect CSS imports: vite/client declares `*.css`, but it isn't resolved
+// for bare side-effect imports here, so declare it explicitly.
+declare module '*.css' {}

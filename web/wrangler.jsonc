@@ -1,0 +1,13 @@
+{
+    "$schema": "node_modules/wrangler/config-schema.json",
+    "name": "script-editor",
+    "compatibility_date": "2026-05-17",
+    // Pure SPA: no Worker entry (`main`). The Cloudflare Vite plugin builds
+    // the client and points the assets binding at the build output, so
+    // `directory` is intentionally omitted here. `single-page-application`
+    // makes deep links (generouted browser-history routes) fall back to
+    // index.html instead of 404ing.
+    "assets": {
+        "not_found_handling": "single-page-application",
+    },
+}

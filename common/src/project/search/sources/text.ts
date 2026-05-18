@@ -96,7 +96,8 @@ export function useTextSearchResults(query: string): TextSearchState {
             totalMatches += usable.length
         }
 
-        void runWithConcurrency(textFiles, scanFile, CONCURRENCY, controller.signal).then(() => {
+        void (async () => {
+            await runWithConcurrency(textFiles, scanFile, CONCURRENCY, controller.signal)
             if (controller.signal.aborted) return
             // Sort by score desc then by path so deterministic order is stable
             // across re-renders.
@@ -107,7 +108,7 @@ export function useTextSearchResults(query: string): TextSearchState {
                 scanned,
                 total: textFiles.length,
             })
-        })
+        })()
 
         return () => controller.abort()
     }, [client, project.files, project.id, query, queryClient, languages])

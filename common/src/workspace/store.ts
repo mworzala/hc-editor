@@ -4,7 +4,6 @@ import { type Storage } from '@hollowcube/common/platform'
 
 import { DEFAULT_SPLIT_BIAS } from './constants'
 import { runMigrations, STORAGE_VERSION } from './migrations'
-import { isWorkspaceState } from './validate'
 import {
     type ActiveDragState,
     type DockId,
@@ -12,6 +11,7 @@ import {
     type Tab,
     type WorkspaceState,
 } from './types'
+import { isWorkspaceState } from './validate'
 
 type Actions = {
     // Layout sizing

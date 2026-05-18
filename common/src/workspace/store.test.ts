@@ -331,10 +331,7 @@ describe('workspace store — corrupt persisted state recovery', () => {
     const poison: Array<[string, string]> = [
         ['not json', '{not json'],
         ['structurally empty', JSON.stringify({ version: STORAGE_VERSION, state: {} })],
-        [
-            'future version after a downgrade',
-            JSON.stringify({ version: 99, state: makeInitial() }),
-        ],
+        ['future version after a downgrade', JSON.stringify({ version: 99, state: makeInitial() })],
         [
             'truncated valid blob',
             JSON.stringify({ version: STORAGE_VERSION, state: makeInitial() }).slice(0, 80),

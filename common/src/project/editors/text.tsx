@@ -223,9 +223,9 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         (matches: UsageMatch[], anchorPos: number, sourceRange: { from: number; to: number }) => {
             const api = editorApiRef.current
             if (!api) return
-            const doc = documentStore.getState().documents[docId]
-            const sourceText = doc
-                ? doc.current.slice(sourceRange.from, sourceRange.to) || 'symbol'
+            const docEntry = documentStore.getState().documents[docId]
+            const sourceText = docEntry
+                ? docEntry.current.slice(sourceRange.from, sourceRange.to) || 'symbol'
                 : 'symbol'
             api.showUsages(sourceText, matches, anchorPos, sourceRange)
         },
@@ -646,7 +646,7 @@ function DiagnosticList({
     onJump: (d: Diagnostic) => void
 }) {
     const sorted = useMemo(() => {
-        return [...diagnostics].sort((a, b) => {
+        return diagnostics.toSorted((a, b) => {
             const sa = a.severity ?? 1
             const sb = b.severity ?? 1
             if (sa !== sb) return sa - sb

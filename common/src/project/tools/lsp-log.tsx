@@ -213,6 +213,8 @@ function RpcList() {
         return client.onRpcMessage((next) => setMessages(next))
     }, [client, supportsRpcLog])
 
+    const copyText = useMemo(() => formatRpcForClipboard(messages), [messages])
+
     if (!supportsRpcLog) {
         return (
             <>
@@ -224,8 +226,6 @@ function RpcList() {
             </>
         )
     }
-
-    const copyText = useMemo(() => formatRpcForClipboard(messages), [messages])
 
     return (
         <>
@@ -508,10 +508,11 @@ function formatJsonPretty(value: unknown): string {
     }
 }
 
+const padZero = (n: number) => n.toString().padStart(2, '0')
+
 function formatTime(ts: number): string {
     const d = new Date(ts)
-    const pad = (n: number) => n.toString().padStart(2, '0')
-    return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`
+    return `${padZero(d.getHours())}:${padZero(d.getMinutes())}:${padZero(d.getSeconds())}`
 }
 
 export const lspLogTool: ToolDefinition = {

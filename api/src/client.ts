@@ -142,8 +142,7 @@ export class HCClient {
         }
 
         const userSignal = options?.signal
-        const timeoutMs =
-            options?.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : options.timeoutMs
+        const timeoutMs = options?.timeoutMs === undefined ? DEFAULT_TIMEOUT_MS : options.timeoutMs
 
         // One network call. A fresh timeout is armed per attempt so every
         // retry gets a full budget, while the caller's signal spans all of
@@ -212,7 +211,7 @@ export class HCClient {
                 await abortableDelay(backoffMs(i, err), userSignal)
             }
         }
-        throw lastErr
+        throw lastErr instanceof Error ? lastErr : new Error(String(lastErr))
     }
 }
 
@@ -220,10 +219,7 @@ export class HCClient {
  *  failure / timeout (status 0), 429, or any 5xx. 4xx (incl. the
  *  already-handled 401) are caller errors and never retried. */
 function isTransient(err: unknown): boolean {
-    return (
-        err instanceof ApiError &&
-        (err.status === 0 || err.status === 429 || err.status >= 500)
-    )
+    return err instanceof ApiError && (err.status === 0 || err.status === 429 || err.status >= 500)
 }
 
 /** Jittered exponential backoff, honoring a server `Retry-After` when present

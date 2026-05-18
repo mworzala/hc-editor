@@ -2,7 +2,6 @@
     "extends": "../tsconfig.base.json",
     "compilerOptions": {
         "noEmit": true,
-        "baseUrl": ".",
         "types": ["bun"],
         "paths": {
             "@hollowcube/design-system/*": ["./src/*"]

@@ -1,0 +1,35 @@
+name: Deploy Web
+
+on:
+    push:
+        branches: [main]
+
+concurrency:
+    group: deploy-web
+    cancel-in-progress: true
+
+jobs:
+    ci:
+        uses: ./.github/workflows/ci.yml
+
+    deploy:
+        needs: ci
+        runs-on: ubuntu-latest
+        steps:
+            - name: Import Secrets
+              uses: hollow-cube/actions/secrets@main
+              with:
+                  token: ${{ secrets.VAULT_TOKEN }}
+                  path: global/github
+
+            - uses: actions/checkout@v4
+
+            - uses: oven-sh/setup-bun@v2
+              with:
+                  bun-version: latest
+
+            - name: Install
+              run: bun install --frozen-lockfile
+
+            - name: Build & deploy to Cloudflare Workers
+              run: bun run deploy:web

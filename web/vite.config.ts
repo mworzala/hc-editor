@@ -1,3 +1,4 @@
+import { cloudflare } from '@cloudflare/vite-plugin'
 import generouted from '@generouted/react-router/plugin'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
@@ -5,7 +6,7 @@ import path from 'node:path'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-    plugins: [react(), tailwindcss(), generouted()],
+    plugins: [react(), tailwindcss(), generouted(), cloudflare()],
     // `jose` is reached only through the @hollowcube/common/auth source barrel,
     // so Vite's dep scanner discovers it late and re-optimizes mid-load —
     // re-bundling react-dom with a fresh hash while the page still holds the
@@ -29,17 +30,6 @@ export default defineConfig({
         dedupe: ['react', 'react-dom', 'react-router'],
         alias: {
             '@': path.resolve(__dirname, './src'),
-        },
-    },
-    server: {
-        proxy: {
-            // Same-origin fallback for any non-DPoP path. The auth client
-            // targets Envoy directly in dev (absolute apiBaseUrl) so the DPoP
-            // htu matches; this proxy points at Envoy too for consistency.
-            '/v1': {
-                target: 'http://localhost:10000',
-                changeOrigin: true,
-            },
         },
     },
 })

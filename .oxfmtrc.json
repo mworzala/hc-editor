@@ -56,6 +56,8 @@
         "**/dist/**",
         "**/build/**",
         "desktop/frontend/bindings/**",
+        "web/src/router.ts",
+        "desktop/frontend/src/router.ts",
         "**/.vite/**",
         "bun.lock"
     ]

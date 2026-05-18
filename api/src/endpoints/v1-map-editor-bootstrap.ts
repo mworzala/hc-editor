@@ -69,10 +69,7 @@ export type UseV1MapEditorBootstrapOptions = { client?: HCClient } & Partial<
     >
 >
 
-export const useV1MapEditorBootstrap = (
-    mapId: string,
-    opts?: UseV1MapEditorBootstrapOptions,
-) => {
+export const useV1MapEditorBootstrap = (mapId: string, opts?: UseV1MapEditorBootstrapOptions) => {
     const client = useHCClient(opts?.client)
     const { client: _client, ...rest } = opts ?? {}
     return useQuery({ ...v1MapEditorBootstrapOptions(client, mapId), ...rest })

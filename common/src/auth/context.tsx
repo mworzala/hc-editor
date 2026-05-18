@@ -168,9 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                             `[auth] init: map ${JSON.stringify(outcome.project)} granted — loading it in the editor`,
                         )
                     } else {
-                        console.info(
-                            '[auth] init: no map in grant — showing "open from in-game"',
-                        )
+                        console.info('[auth] init: no map in grant — showing "open from in-game"')
                     }
                     setActiveProjectId(outcome.project)
                     setSessions(await graph.sessionStore.list())

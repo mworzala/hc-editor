@@ -17,9 +17,7 @@ describe('path helpers — map routes', () => {
     test('encodeWildcardPath strips a leading slash and encodes per-segment', () => {
         // No leading slash, but slashes between segments survive (the wildcard
         // captures multiple path segments).
-        expect(encodeWildcardPath('/world/region/r.0.0.mca')).toBe(
-            'world/region/r.0.0.mca',
-        )
+        expect(encodeWildcardPath('/world/region/r.0.0.mca')).toBe('world/region/r.0.0.mca')
         expect(encodeWildcardPath('a b/c+d')).toBe('a%20b/c%2Bd')
     })
 

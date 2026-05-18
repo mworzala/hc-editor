@@ -34,11 +34,11 @@ import { CloseFocusedTabAction, useTabContextMenu } from './data/tab-actions'
 import { DockAddToolButton } from './DockAddToolButton'
 import { DockEmptyState } from './DockEmptyState'
 import { DocumentStoreProvider, useDocumentStore } from './documents'
-import { ProjectErrorBoundary } from './error-boundary'
 import { apiTestEditor } from './editors/api-test'
 import { docsEditor } from './editors/docs'
 import { TEXT_EDITOR_KIND, textEditor } from './editors/text'
 import { welcomeEditor } from './editors/welcome'
+import { ProjectErrorBoundary } from './error-boundary'
 import { createInitialWorkspaceState } from './initial-state'
 import { LspBufferBridge } from './LspBufferBridge'
 import { LspWatchedFilesBridge } from './LspWatchedFilesBridge'
@@ -86,9 +86,7 @@ export function ProjectWorkspace() {
                     <HCClientProvider client={client}>
                         <ProjectLoader
                             projectId={projectId}
-                            loading={
-                                <StatusScreen tone='muted'>Loading project…</StatusScreen>
-                            }
+                            loading={<StatusScreen tone='muted'>Loading project…</StatusScreen>}
                             errored={(err) => (
                                 <StatusScreen tone='error'>
                                     Failed to load project: {formatErr(err)}

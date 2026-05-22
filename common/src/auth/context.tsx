@@ -83,10 +83,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             onNeedsReauth: (account) => onNeedsReauthRef.current(account),
         })
 
+        const dummyAuth = platform.devDummyAuth === true
         const authHook: HCAuthHook = {
-            getAccessToken: () => tokenManager.getAccessToken(),
-            onUnauthorized: () => tokenManager.onUnauthorized(),
+            // Dev-only short-circuit: skip DPoP / token manager and emit a
+            // stub token + proof. The backend must run with a matching
+            // auth-disable flag for these to be accepted.
+            getAccessToken: () =>
+                dummyAuth ? Promise.resolve('dev-dummy-token') : tokenManager.getAccessToken(),
+            onUnauthorized: () =>
+                dummyAuth ? Promise.resolve('dev-dummy-token') : tokenManager.onUnauthorized(),
             createProof: async (method, htu, accessToken) => {
+                if (dummyAuth) return 'dev-dummy-proof'
                 const { privateKey } = await keyStore.getOrCreate()
                 const publicJwk = await keyStore.exportPublicJwk()
                 return buildDpopProof({ privateKey, publicJwk, htm: method, htu, accessToken })
@@ -97,10 +104,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             isPublic: (path) => path === '/v1/auth/redeem' || path === '/v1/auth/token',
         }
 
-        const client = new HCClient({ baseUrl: platform.apiBaseUrl ?? '', auth: authHook })
+        // Dev-only: when a fake user id is configured, stamp `x-auth-user`
+        // on every outgoing request. The backend's auth-disabled mode reads
+        // identity from this header instead of the access token, so pairing
+        // it with `devDummyAuth` is the usual combination.
+        const devAuthUser = platform.devAuthUser
+        const stampedFetch = (input: RequestInfo | URL, init?: RequestInit) => {
+            const headers = new Headers(init?.headers)
+            if (!headers.has('x-auth-user')) headers.set('x-auth-user', devAuthUser!)
+            return globalThis.fetch(input, { ...init, headers })
+        }
+        const fetchImpl = devAuthUser ? (stampedFetch as typeof fetch) : undefined
+
+        const client = new HCClient({
+            baseUrl: platform.apiBaseUrl ?? '',
+            auth: authHook,
+            fetch: fetchImpl,
+        })
         clientRef.current = client
         return { keyStore, sessionStore, launchSource, tokenManager, client }
-    }, [platform.apiBaseUrl, platform.keyStore, platform.launchCode, platform.kind])
+    }, [
+        platform.apiBaseUrl,
+        platform.keyStore,
+        platform.launchCode,
+        platform.kind,
+        platform.devDummyAuth,
+        platform.devAuthUser,
+    ])
 
     const resolveFromStore = useCallback(async () => {
         const stored = await graph.sessionStore.list()
@@ -131,6 +161,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const init = useCallback(async () => {
         try {
             setStatus({ kind: 'initializing' })
+
+            // Dev-only short-circuit: skip the whole launch/redeem/token
+            // dance and declare ourselves authenticated. Pairs with the
+            // dummy auth hook above and a matching backend auth-disable
+            // flag. Without an override map id there's nothing to open, so
+            // the gate will still show "open from in-game".
+            if (platform.devDummyAuth) {
+                setActiveProjectId(platform.devMapIdOverride ?? null)
+                setActiveAccount('dev-dummy')
+                setStatus({ kind: 'authenticated', account: 'dev-dummy' })
+                return
+            }
+
             // Ensure the client keypair exists before any proof is built.
             await graph.keyStore.getOrCreate()
 
@@ -154,8 +197,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     )
                     // Stash the granted map (per-tab) BEFORE flipping to
                     // `authenticated` so the gate observes it on the same
-                    // render. `null` → gate shows "open from in-game".
-                    setActiveProjectId(outcome.project)
+                    // render. `null` → gate shows "open from in-game". A dev
+                    // override beats the granted project so local testing
+                    // can pin a specific map regardless of which launch
+                    // code was used.
+                    setActiveProjectId(platform.devMapIdOverride ?? outcome.project)
                     setSessions(await graph.sessionStore.list())
                     setActiveAccount(outcome.session.account)
                     setStatus({ kind: 'authenticated', account: outcome.session.account })
@@ -173,12 +219,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
                     return
                 }
             }
+            // On the resume path, apply the dev override so a stored
+            // session opens the override map instead of whatever was
+            // last granted.
+            if (platform.devMapIdOverride) {
+                setActiveProjectId(platform.devMapIdOverride)
+            }
             await resolveFromStore()
         } catch (error) {
             console.error('[auth] init: unexpected error', error)
             setStatus({ kind: 'error', error })
         }
-    }, [graph, resolveFromStore, platform.kind])
+    }, [graph, resolveFromStore, platform.kind, platform.devDummyAuth, platform.devMapIdOverride])
 
     // Run once. The ref guard covers the React StrictMode dev double-invoke;
     // the launch-code source strip + redeem in-flight map are the deeper

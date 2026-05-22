@@ -21,13 +21,37 @@ import '@hollowcube/design-system/globals.css'
 // host throws at load rather than guessing.
 // Resolved once here at load — referentially stable for the page lifetime
 // (the AuthProvider's HCClient useMemo depends on this not changing).
-const apiBaseUrl = resolveApiBaseUrl(window.location.hostname)
+//
+// Dev-only env overrides (all gated by import.meta.env.DEV so production
+// builds tree-shake them out, regardless of what's set):
+//   VITE_DEV_API_URL          — replaces the resolved api base
+//   VITE_DEV_EDITOR_MAP_ID    — forces the active project (map) id
+//   VITE_DEV_DUMMY_AUTH=true  — skip launch/redeem; requires the backend
+//                               to be running with auth disabled
+//   VITE_DEV_AUTH_USER        — stamp this id as `x-auth-user` on every
+//                               request (pairs with the backend's
+//                               auth-disabled mode)
+const devApiUrl = import.meta.env.DEV
+    ? (import.meta.env.VITE_DEV_API_URL?.trim() ?? '')
+    : ''
+const apiBaseUrl = devApiUrl || resolveApiBaseUrl(window.location.hostname)
+
+const devMapIdOverride = import.meta.env.DEV
+    ? (import.meta.env.VITE_DEV_EDITOR_MAP_ID?.trim() ?? '')
+    : ''
+const devDummyAuth = import.meta.env.DEV && import.meta.env.VITE_DEV_DUMMY_AUTH === 'true'
+const devAuthUser = import.meta.env.DEV
+    ? (import.meta.env.VITE_DEV_AUTH_USER?.trim() ?? '')
+    : ''
 
 const platform = {
     kind: 'web' as const,
     storage: createBrowserStorage(),
     apiBaseUrl,
     launchCode: createHashLaunchCodeSource(),
+    devMapIdOverride: devMapIdOverride || undefined,
+    devDummyAuth: devDummyAuth || undefined,
+    devAuthUser: devAuthUser || undefined,
 }
 
 // generouted's <Routes> builds its own browser router with no basename, so it

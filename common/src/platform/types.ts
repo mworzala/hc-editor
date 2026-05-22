@@ -119,4 +119,20 @@ export type Platform = {
     /** Pending launch-code source. Web injects a `location.hash` reader;
      *  desktop leaves this absent until Phase 2 (Wails deep link). */
     launchCode?: LaunchCodeSource
+    /** Dev-only: when true, skip the real launch/redeem/token flow and treat
+     *  every request as authenticated. The auth hook returns a stub token and
+     *  proof, so the backend must be running with a matching auth-disabled
+     *  flag for requests to succeed. The shell only sets this when
+     *  `import.meta.env.DEV` is true, so production builds tree-shake it out. */
+    devDummyAuth?: boolean
+    /** Dev-only: when set, force this string as the active project (map) id,
+     *  bypassing whatever the launch grant carried (or the absence of one).
+     *  Lets local dev / Claude Preview open a workspace without a real
+     *  in-game launch. Production builds never read this. */
+    devMapIdOverride?: string
+    /** Dev-only: when set, send this value as the `x-auth-user` header on
+     *  every API request. Pairs with the backend's auth-disabled mode,
+     *  which reads the user identity from this header instead of the
+     *  access token. Production builds never read this. */
+    devAuthUser?: string
 }

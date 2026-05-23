@@ -1,7 +1,7 @@
 import { canonicalHtu, v1AuthRedeem, type ClientKind, type HCClient } from '@hollowcube/api'
 
-import type { ClientKeyStore } from '../platform'
 import { buildClientKeyProof } from './dpop'
+import type { ClientKeyStore } from './keystore'
 import type { SessionStore, StoredSession } from './types'
 
 export type RedeemOutcome =

@@ -1,4 +1,5 @@
 export { ProjectWorkspace } from './ProjectWorkspace'
+export { synthesizeProjectName } from './display'
 export {
     ProjectProvider,
     ProjectStateProvider,

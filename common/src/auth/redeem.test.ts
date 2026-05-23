@@ -2,7 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { HCClient } from '@hollowcube/api'
 
-import type { ClientKeyStore } from '../platform'
+import type { ClientKeyStore } from './keystore'
 import { redeemLaunchCode } from './redeem'
 import { createMemorySessionStore } from './sessionstore'
 

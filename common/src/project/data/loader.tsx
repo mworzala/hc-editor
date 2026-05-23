@@ -46,12 +46,10 @@ export function ProjectLoader({ projectId, loading, errored, children }: Project
     )
 
     // Always update the window title to match the map name.
-    const { window } = usePlatform()
+    const platform = usePlatform()
     useEffect(() => {
-        if (project?.name) {
-            window?.setTitle(project.name)
-        }
-    }, [project?.name, window])
+        if (project?.name) platform.setWindowTitle(project.name)
+    }, [project?.name, platform])
 
     if (status === 'pending') {
         return (

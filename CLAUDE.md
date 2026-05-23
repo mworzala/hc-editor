@@ -84,9 +84,33 @@ Layout from left to right:
 
 ## Platform abstraction
 
-`common/src/platform/` defines `Platform { kind: 'web' | 'desktop', storage: Storage }` and the `<PlatformProvider>` / `usePlatform()` plumbing. `kind` drives desktop-only chrome (traffic-light spacer, drag region). `storage` is a `{ get, set, remove }` interface; concrete impls live alongside: `createBrowserStorage()` (web + desktop, both use `localStorage`) and `createMemoryStorage()` (testing / SSR).
+`common/src/platform/` defines the `Platform` type and the `<PlatformProvider>` / `usePlatform()` plumbing. The shape is intentionally small — add a field only when there's a real consumer on both platforms (or when the absence on one platform needs to be expressible).
+
+Required on every platform:
+
+- `kind: 'web' | 'desktop'` — drives desktop-only chrome (traffic-light spacer, drag region).
+- `storage: { get, set, remove }` — concrete impls: `createBrowserStorage()` (web + desktop, both use `localStorage`) and `createMemoryStorage()` (testing / SSR).
+- `setWindowTitle(title: string): void` — web → `document.title`; desktop → Wails `Window.SetTitle`. Both shells set a placeholder from the project id on mount; the project loader overwrites it with the real map name once the API responds.
+
+Optional:
+
+- `apiBaseUrl: string` — absolute origin for the API host. Always set in practice; optional only so tests/SSR can omit it. See `common/src/auth/context.tsx` for why desktop bypasses the `wails://` handler.
+- `menu: MenuController` — desktop-only native menu bridge consumed by `NativeMenuBridge`.
+- `launchCode: LaunchCodeSource` — web supplies `createHashLaunchCodeSource()` (reads + strips `location.hash`). Desktop has no source yet — the Wails deep-link handoff is unbuilt.
+- Dev-only fields: `devDummyAuth`, `devMapIdOverride`, `devAuthUser`. Set from `import.meta.env.DEV`-gated env vars in the shell's `main.tsx` so production builds tree-shake them.
 
 When adding platform-specific behavior, extend the `Platform` type rather than runtime-detecting Wails or `navigator.userAgent`.
+
+## Active project id
+
+The active project id is sourced **differently per platform — intentionally**:
+
+- **Web** reads it from `sessionStorage` (`hc-active-project`). Per-tab, cleared on tab close, survives reload. `AuthProvider` surfaces the project from the most recent redeem via context (`grantedProject`); the web page shell (`web/src/pages/index.tsx`) persists that into sessionStorage and reads it back. A brand-new tab with stored sessions but no fresh grant shows the "open from in-game" screen.
+- **Desktop** reads it from the URL (`/#/project/:projectId`). The Go-side `WindowManager` opens each project in its own window with a distinct route. `grantedProject` is ignored on desktop (project list / launcher window is the entry point).
+
+Both flows feed into `ProjectWorkspace({ projectId })`, which uses `hc-project:<projectId>` as the workspace storage key. There is no shared "active project" helper — `getActiveProjectId` / `setActiveProjectId` in `common/src/auth/active-project.ts` are web-only and live there because the launch-grant plumbing they pair with is also web-only.
+
+`AuthGate` only requires an authenticated session; the project-id check is the page shell's job (web falls back to "open from in-game", desktop redirects to the launcher).
 
 ## Routes
 
@@ -147,6 +171,6 @@ The architecture is intentionally ahead of the feature set in a few places. Don'
 - **API wiring for files.** `@hollowcube/api` already has `HCClient`, `v1ProjectGet`, `v1ProjectFilesGet/Update/Delete`, and project-event SSE. The files tool currently renders an empty "No files yet" state — its API integration is deferred and will land as its own change. Don't add API calls to the workspace until that work begins.
 - **Tool launching.** Tools are currently only seeded via `createInitialWorkspaceState`. An `openTool(toolId)` action (focuses an existing instance or creates one at `defaultLocation`) will be added when more tools and/or a command palette arrive.
 - **Editor opening flow.** Editors are registered but nothing dispatches "open file → create editor tab" yet. When a file is selected, the host will look up the editor whose `mimeTypes` includes the file's mime, then call a `state.openEditor({ leafId?, file })` action (to be added).
-- **Multi-project.** _v0 (done):_ the project id comes from the in-game launch grant. `redeem` threads `res.project` into `RedeemOutcome`; `AuthProvider.init()` stashes it via `setActiveProjectId` into `sessionStorage` (key `hc-active-project`) — deliberately **per-tab and cleared on tab close**, not the URL/IndexedDB/workspace `Storage`. `ProjectWorkspace` reads it with `getActiveProjectId()`; the workspace storage key is `hc-project:<projectId>` (no version suffix). `AuthGate` requires _both_ an authenticated session and a known project id before rendering the workspace — otherwise it shows the "open from in-game" screen (no stale/hardcoded project). **Per-tab nuance:** reloading the same tab keeps the project (sessionStorage persists); a brand-new tab with only a stored session and no fresh grant shows "open from in-game" — re-launch from in-game to re-establish it. _Phase 2 (not in v0):_ recent-projects list, project picker, `/:projectId` routing, project-list endpoint.
+- **Multi-project navigation.** The active project id flow is the [Active project id](#active-project-id) section above. What's not yet built: a recent-projects list, an in-app project picker, and the project-list API endpoint that would feed it. The desktop launcher is the only project picker today and reads from a stub (`desktop/frontend/src/launcher/useProjects.ts`).
 - **Filesystem sync (desktop).** Wails-side sync of the project tree to the local filesystem is planned so users can edit files in external programs (e.g. textures in Aseprite). Lives in `desktop/main.go` + bindings when it arrives.
 - **More tools / editors.** Adding either is a localized change: drop a new `ToolDefinition` / `EditorDefinition` under `project/tools/` or `project/editors/` and register it in the `TOOLS` / `EDITORS` arrays in `ProjectWorkspace.tsx`.

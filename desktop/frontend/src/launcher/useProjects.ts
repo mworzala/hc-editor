@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
 
 import { usePlatform } from '@hollowcube/common/platform'
+import { synthesizeProjectName } from '@hollowcube/common/project'
 
-import { synthesizeProjectName, type LauncherProject } from './projects'
+import { type LauncherProject } from './projects'
 
 // Phase 1: surface only the dev-override project. Production builds will read
 // the override as undefined (env vars are tree-shaken by Vite when DEV=false)

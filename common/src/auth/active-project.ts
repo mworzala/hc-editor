@@ -1,16 +1,19 @@
-// Per-tab active project id.
+// Per-tab active project id (web-only).
 //
-// The in-game launch grant carries the project the tester opened from. We
-// stash it in `sessionStorage` — deliberately NOT the URL, NOT IndexedDB, and
-// NOT the workspace `Storage` abstraction:
+// The in-game launch grant carries the project the tester opened from. On
+// web we stash it in `sessionStorage` — deliberately NOT the URL, NOT
+// IndexedDB, and NOT the workspace `Storage` abstraction:
 //
 //   • per-tab — two tabs (two in-game launches) target different projects
 //     without colliding
-//   • cleared on tab close — there is intentionally no resume-without-grant
-//     path in v0; re-entry from in-game re-establishes it each session
+//   • cleared on tab close — no resume-without-grant path; re-entry from
+//     in-game re-establishes it each session
+//   • reload survives — the same tab keeps its project across F5
 //
-// v0 scope only: no recent-projects list, no picker, no `/:projectId`
-// routing. Full multi-project navigation is Phase 2.
+// Desktop does NOT use this module. There the active project id lives in
+// the URL (`/#/project/:projectId`) because the Go-side WindowManager opens
+// each project in its own window with a distinct route — sessionStorage
+// would be the wrong scope (one webview per window, not per project).
 
 const KEY = 'hc-active-project'
 

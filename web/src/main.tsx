@@ -48,6 +48,9 @@ const platform = {
     kind: 'web' as const,
     storage: createBrowserStorage(),
     apiBaseUrl,
+    setWindowTitle: (title: string) => {
+        document.title = title
+    },
     launchCode: createHashLaunchCodeSource(),
     devMapIdOverride: devMapIdOverride || undefined,
     devDummyAuth: devDummyAuth || undefined,

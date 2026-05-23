@@ -72,7 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     const clientRef = useRef<HCClient | null>(null)
     const graph = useMemo(() => {
-        const keyStore = platform.keyStore ?? createWebCryptoKeyStore()
+        const keyStore = createWebCryptoKeyStore()
         const sessionStore = createIndexedDbSessionStore()
         const launchSource =
             platform.launchCode ??
@@ -130,7 +130,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return { keyStore, sessionStore, launchSource, tokenManager, client }
     }, [
         platform.apiBaseUrl,
-        platform.keyStore,
         platform.launchCode,
         platform.kind,
         platform.devDummyAuth,

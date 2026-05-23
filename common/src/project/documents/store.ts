@@ -42,8 +42,12 @@ type DocumentStoreState = {
     closeDocument: (id: DocumentId, opts?: { force?: boolean }) => void
     /** Replace the document's live buffer. Marks dirty if it diverges. */
     setContent: (id: DocumentId, content: string) => void
-    /** Mark `current` as the new saved snapshot. Clears dirty. */
-    commit: (id: DocumentId) => void
+    /** Advance the saved snapshot. With no `snapshot` arg, sets
+     *  `original = current` (the legacy behavior). Pass `snapshot` when the
+     *  caller has the exact bytes it sent to the server, so concurrent edits
+     *  during the save round-trip stay marked dirty against the *saved*
+     *  value rather than being silently absorbed. */
+    commit: (id: DocumentId, snapshot?: string) => void
     /** Revert `current` to `original`. */
     discard: (id: DocumentId) => void
 }
@@ -111,14 +115,19 @@ export function createDocumentStore(): DocumentStore {
             })
         },
 
-        commit: (id) => {
+        commit: (id, snapshot) => {
             set((s) => {
                 const existing = s.documents[id]
                 if (!existing) return s
+                const newOriginal = snapshot ?? existing.current
                 return {
                     documents: {
                         ...s.documents,
-                        [id]: { ...existing, original: existing.current, dirty: false },
+                        [id]: {
+                            ...existing,
+                            original: newOriginal,
+                            dirty: existing.current !== newOriginal,
+                        },
                     },
                 }
             })

@@ -1,7 +1,7 @@
 import { canonicalHtu, v1AuthToken, type HCClient } from '@hollowcube/api'
 
-import type { ClientKeyStore } from '../platform'
 import { buildClientKeyProof } from './dpop'
+import type { ClientKeyStore } from './keystore'
 
 // In-memory access-token lifecycle for the active session. Tokens are never
 // persisted. Refresh mints via /v1/auth/token, PoP-signed with the CLIENT key

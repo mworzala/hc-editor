@@ -4,7 +4,7 @@ import { routes } from '@generouted/react-router'
 import { Window } from '@wailsio/runtime'
 
 import { AppRoot } from '@hollowcube/common'
-import { createBrowserStorage, type WindowControls } from '@hollowcube/common/platform'
+import { createBrowserStorage } from '@hollowcube/common/platform'
 
 import { desktopMenuController } from './menu-bridge'
 
@@ -36,21 +36,16 @@ const devAuthUser = import.meta.env.DEV
 const platform = {
     kind: 'desktop' as const,
     storage: createBrowserStorage(),
-    window: {
-        setTitle: Window.SetTitle,
-        minimize: Window.Minimise,
-        toggleFullScreen: Window.ToggleFullscreen,
-        close: Window.Close,
-    } satisfies WindowControls,
+    setWindowTitle: (title: string) => Window.SetTitle(title),
     // Absolute URL to Envoy: also bypasses the `wails://` custom-scheme
     // handler (WKURLSchemeHandler drops HTTP bodies — WebKit bug 192315). The
     // request origin == the DPoP `htu` the backend reconstructs.
     apiBaseUrl: devApiUrl || 'http://localhost:10000',
     menu: desktopMenuController,
-    // No `launchCode` source in Phase 1: desktop uses hash routing (reading
+    // No `launchCode` source today: desktop uses hash routing (reading
     // `location.hash` would collide with the router) and the web→native
-    // handoff is Phase 2 — a Wails deep-link event will supply a
-    // LaunchCodeSource here then.
+    // handoff isn't built yet — a Wails deep-link event will supply a
+    // LaunchCodeSource here when it lands.
     devMapIdOverride: devMapIdOverride || undefined,
     devDummyAuth: devDummyAuth || undefined,
     devAuthUser: devAuthUser || undefined,

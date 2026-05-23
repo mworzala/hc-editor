@@ -1,6 +1,6 @@
 import { useCallback, useMemo } from 'react'
 
-import { HCClientProvider, useHCClient } from '@hollowcube/api'
+import { HCClientProvider } from '@hollowcube/api'
 import { TooltipProvider } from '@hollowcube/design-system'
 
 import { useAuth } from '../auth'
@@ -14,8 +14,6 @@ import {
     useWorkspaceStore,
     Workspace,
     type DockId,
-    type Tab,
-    type TabLocation,
 } from '../workspace'
 import { type WorkspaceStoreHook } from '../workspace/context'
 import {
@@ -33,7 +31,7 @@ import { PendingFilesProvider, usePendingFilesStore } from './data/pending-files
 import { CloseFocusedTabAction, useTabContextMenu } from './data/tab-actions'
 import { DockAddToolButton } from './DockAddToolButton'
 import { DockEmptyState } from './DockEmptyState'
-import { DocumentStoreProvider, useDocumentStore } from './documents'
+import { DocumentStoreProvider } from './documents'
 import { apiTestEditor } from './editors/api-test'
 import { docsEditor } from './editors/docs'
 import { TEXT_EDITOR_KIND, textEditor } from './editors/text'
@@ -121,48 +119,9 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
 }
 
 function ProjectWorkspaceInner({ projectId }: { projectId: string }) {
-    const client = useHCClient()
-    const documentStore = useDocumentStore()
-    const pendingStore = usePendingFilesStore()
-
-    // Auto-save dirty saved-path editor tabs on close. Untitled dirty tabs
-    // can't be saved without a path, so we allow them to close (discarding
-    // the in-memory buffer) — the user always had Cmd+S available, which
-    // surfaces the save prompt.
-    const beforeCloseTab = useCallback(
-        async (tab: Tab, _loc: TabLocation): Promise<boolean> => {
-            if (tab.kind !== TEXT_EDITOR_KIND) return true
-            const payload = tab.payload as { path?: string; tempId?: string } | undefined
-            const explicitPath = payload?.path
-            const pendingPath = payload?.tempId
-                ? (pendingStore.getState().pending[payload.tempId]?.path ?? null)
-                : null
-            const effectivePath = explicitPath ?? pendingPath ?? null
-            const docId =
-                effectivePath ??
-                (payload?.tempId ? `unsaved:${payload.tempId}` : `unsaved:${tab.id}`)
-            const doc = documentStore.getState().documents[docId]
-            if (!doc || !doc.dirty || !effectivePath) return true
-            try {
-                await client.v1.map.files.update(
-                    projectId,
-                    effectivePath,
-                    doc.current,
-                    'text/plain',
-                )
-                documentStore.getState().commit(docId)
-            } catch (e) {
-                console.warn('[beforeCloseTab] auto-save failed', e)
-            }
-            return true
-        },
-        [client, documentStore, pendingStore, projectId],
-    )
-
     const useStore = useWorkspaceStore({
         storageKey: workspaceStorageKey(projectId),
         initialState: createInitialWorkspaceState(),
-        beforeCloseTab,
     })
     const tabRegistry = useTabRegistry()
     const tabContextMenu = useTabContextMenu({ useStore })

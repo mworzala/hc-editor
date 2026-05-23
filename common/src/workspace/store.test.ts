@@ -24,18 +24,13 @@ function makeInitial(centerLeafId = 'leaf-center'): WorkspaceState {
     }
 }
 
-function makeStore(opts?: {
-    initialState?: WorkspaceState
-    storage?: Storage
-    beforeCloseTab?: Parameters<typeof createWorkspaceStore>[0]['beforeCloseTab']
-}) {
+function makeStore(opts?: { initialState?: WorkspaceState; storage?: Storage }) {
     const storage = opts?.storage ?? createMemoryStorage()
     return createWorkspaceStore({
         storageKey: STORAGE_KEY,
         initialState: opts?.initialState ?? makeInitial(),
         storage,
         persistDebounceMs: 0, // write synchronously in tests
-        beforeCloseTab: opts?.beforeCloseTab,
     })
 }
 
@@ -105,38 +100,6 @@ describe('workspace store — closeTab', () => {
         expect(leafA.activeId).toBe('t2')
     })
 
-    test('vetoes close when sync beforeCloseTab returns false', () => {
-        const initial = makeInitial('leaf-A')
-        initial.center = leaf('leaf-A', [tab('t1')], 't1')
-        const store = makeStore({
-            initialState: initial,
-            beforeCloseTab: () => false,
-        })
-
-        store.getState().closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't1')
-
-        const leafA = findLeaf(store.getState().center, 'leaf-A')!
-        expect(leafA.tabs).toHaveLength(1) // veto held
-    })
-
-    test('proceeds when async beforeCloseTab resolves true', async () => {
-        const initial = makeInitial('leaf-A')
-        // Two tabs so the leaf survives the close (single-tab leaves get pruned).
-        initial.center = leaf('leaf-A', [tab('t1'), tab('t2')], 't1')
-        const store = makeStore({
-            initialState: initial,
-            beforeCloseTab: () => Promise.resolve(true),
-        })
-
-        store.getState().closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't1')
-
-        // Wait a microtask for the resolved promise to flush.
-        await Promise.resolve()
-        await Promise.resolve()
-
-        const leafA = findLeaf(store.getState().center, 'leaf-A')!
-        expect(leafA.tabs.map((t) => t.id)).toEqual(['t2'])
-    })
 })
 
 describe('workspace store — moveTab', () => {

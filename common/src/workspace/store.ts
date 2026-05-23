@@ -69,13 +69,6 @@ type CreateOpts = {
     /** Debounce window (ms) for writes back to storage. Defaults to 75ms. Set
      *  to 0 to write synchronously (useful for tests). */
     persistDebounceMs?: number
-    /** Optional guard invoked before a `closeTab` runs. Return `false` (or a
-     *  promise resolving to `false`) to veto the close — the store leaves the
-     *  tab in place and the caller is responsible for issuing the close again
-     *  once the guard's prerequisites are met. Used by the project shell to
-     *  auto-save dirty editor tabs (and to prompt for a path on untitled tabs)
-     *  before they're removed. */
-    beforeCloseTab?: (tab: Tab, loc: TabLocation) => boolean | Promise<boolean>
 }
 
 type Persisted = { version: number; state: WorkspaceState }
@@ -187,45 +180,22 @@ export function createWorkspaceStore(opts: CreateOpts): UseBoundStore<StoreApi<W
             },
 
             closeTab: (loc, tabId) => {
-                const guard = opts.beforeCloseTab
-                const doClose = () => {
-                    set((s) => {
-                        const next = updateDockOrLeaf(s, loc, (d) => {
-                            const tabs = d.tabs.filter((t) => t.id !== tabId)
-                            const activeId =
-                                d.activeId === tabId
-                                    ? (tabs[
-                                          Math.max(0, d.tabs.findIndex((t) => t.id === tabId) - 1)
-                                      ]?.id ?? null)
-                                    : d.activeId
-                            return { ...d, tabs, activeId }
-                        })
-                        if (loc.kind !== 'editor') return next
-                        const pruned = pruneEmptyLeaves(next)
-                        return rebindFocusIfMissing(pruned)
+                set((s) => {
+                    const next = updateDockOrLeaf(s, loc, (d) => {
+                        const tabs = d.tabs.filter((t) => t.id !== tabId)
+                        const activeId =
+                            d.activeId === tabId
+                                ? (tabs[
+                                      Math.max(0, d.tabs.findIndex((t) => t.id === tabId) - 1)
+                                  ]?.id ?? null)
+                                : d.activeId
+                        return { ...d, tabs, activeId }
                     })
-                    persist()
-                }
-                if (!guard) {
-                    doClose()
-                    return
-                }
-                // Look up the tab snapshot before close so the guard can read
-                // its kind / payload.
-                const tab = findTabInState(get(), tabId)
-                if (!tab) {
-                    doClose()
-                    return
-                }
-                const result = guard(tab, loc)
-                if (typeof result === 'boolean') {
-                    if (result) doClose()
-                    return
-                }
-                void result.then((ok) => {
-                    if (ok) doClose()
-                    return undefined
+                    if (loc.kind !== 'editor') return next
+                    const pruned = pruneEmptyLeaves(next)
+                    return rebindFocusIfMissing(pruned)
                 })
+                persist()
             },
 
             updateTab: (tabId, patch) => {
@@ -559,20 +529,6 @@ function rebindFocusIfMissing(state: WorkspaceState): WorkspaceState {
 
 export function makeId(prefix: string): string {
     return `${prefix}-${crypto.randomUUID()}`
-}
-
-function findTabInState(state: WorkspaceState, tabId: string): Tab | null {
-    for (const dock of ['left', 'right', 'bottom'] as const) {
-        const hit = state[dock].tabs.find((t) => t.id === tabId)
-        if (hit) return hit
-    }
-    let found: Tab | null = null
-    walkLeaves(state.center, (leaf) => {
-        if (found) return
-        const hit = leaf.tabs.find((t) => t.id === tabId)
-        if (hit) found = hit
-    })
-    return found
 }
 
 function patchTabEverywhere(

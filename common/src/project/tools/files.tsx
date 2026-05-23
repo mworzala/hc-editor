@@ -293,10 +293,8 @@ function FilesPane() {
         (path: string) => {
             // Close any open editor tabs that reference this file (or any file
             // beneath it for a deleted folder) BEFORE issuing the delete. The
-            // text editor's auto-save-on-close path is path-aware: it only
-            // touches the server if the doc is dirty, and by then we've already
-            // committed to deleting the file — letting save run after delete
-            // would race or resurrect it.
+            // tab unmount cancels the editor's pending autosave timer, so we
+            // don't race the delete with a save that would resurrect the file.
             closeTabsForPath(useStore, path)
             deleteMutation.mutate({ mapId: project.id, path })
         },
@@ -400,8 +398,8 @@ function FilesPane() {
 }
 
 /** Close every text editor tab whose path equals `target` or sits beneath it
- *  (folder delete). Closing happens before the server mutation so the
- *  beforeCloseTab auto-save guard sees the file as still present. */
+ *  (folder delete). Closing happens before the server mutation so the editor
+ *  unmounts and cancels its autosave timer ahead of the delete. */
 function closeTabsForPath(useStore: WorkspaceStoreHook, target: string) {
     const store = useStore.getState()
     const locations = selectTabLocations(store)

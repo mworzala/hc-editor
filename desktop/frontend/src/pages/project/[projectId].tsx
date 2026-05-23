@@ -3,9 +3,7 @@ import { Navigate, useParams } from 'react-router'
 
 import { AuthGate } from '@hollowcube/common/auth'
 import { usePlatform } from '@hollowcube/common/platform'
-import { ProjectWorkspace } from '@hollowcube/common/project'
-
-import { synthesizeProjectName } from '../../launcher/projects'
+import { ProjectWorkspace, synthesizeProjectName } from '@hollowcube/common/project'
 
 export default function ProjectPage() {
     const { projectId } = useParams<{ projectId: string }>()
@@ -13,8 +11,8 @@ export default function ProjectPage() {
 
     useEffect(() => {
         if (!projectId) return
-        platform.window?.setTitle(synthesizeProjectName(projectId))
-    }, [platform.window, projectId])
+        platform.setWindowTitle(synthesizeProjectName(projectId))
+    }, [platform, projectId])
 
     if (!projectId) return <Navigate to='/launcher' replace />
 

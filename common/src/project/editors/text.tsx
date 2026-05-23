@@ -51,12 +51,15 @@ import { TEXT_EDITOR_KIND } from './text-kind'
 //   • `{ tempId }`     — a purely untitled file (Cmd+N). No fetch; the
 //                        Document starts empty. Saving prompts for a path.
 //
-// Save triggers: editor blur, Ctrl/Cmd+S, and the workspace store's
-// `beforeCloseTab` hook (wired in ProjectWorkspace).
+// Save triggers: continuous debounced autosave (path-bound tabs only),
+// editor blur, and Ctrl/Cmd+S. Untitled tabs only save on explicit Ctrl/Cmd+S
+// (which surfaces the save-as prompt) — autosave skips them.
 
 // Re-export so existing `from './editors/text'` import sites keep working
 // while the standalone module is the canonical source.
 export { TEXT_EDITOR_KIND }
+
+const AUTOSAVE_DELAY_MS = 800
 
 const EMPTY_EDITOR_SERVICES: EditorServices = {}
 const EMPTY_DIAGNOSTIC_COUNTS: DiagnosticCounts = {
@@ -406,10 +409,10 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                 if (path !== docId) {
                     // Promote the unsaved document to its real id (the path).
                     store.openDocument(path, body)
-                    store.commit(path)
+                    store.commit(path, body)
                     store.closeDocument(docId, { force: true })
                 } else {
-                    store.commit(docId)
+                    store.commit(docId, body)
                 }
                 if (payload.tempId) pendingStore.getState().remove(payload.tempId)
                 // Patch the tab: drop tempId, point at path.
@@ -452,6 +455,16 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     useEffect(() => {
         saveRef.current = save
     }, [save])
+
+    // Debounced autosave for path-bound tabs. Each edit re-runs the effect
+    // (doc identity changes via setContent) and resets the trailing-edge
+    // timer; unmount and discard both cancel via the cleanup. Untitled tabs
+    // skip — they have no path and need the explicit save-as prompt.
+    useEffect(() => {
+        if (!effectivePath || !doc?.dirty) return
+        const timer = setTimeout(() => void save(), AUTOSAVE_DELAY_MS)
+        return () => clearTimeout(timer)
+    }, [effectivePath, doc, save])
 
     if (isExistingFile && fileQuery.isPending) {
         return <Status>Loading {basename(effectivePath ?? '')}…</Status>

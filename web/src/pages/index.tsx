@@ -8,7 +8,7 @@ import {
     useAuth,
 } from '@hollowcube/common/auth'
 import { usePlatform } from '@hollowcube/common/platform'
-import { ProjectWorkspace } from '@hollowcube/common/project'
+import { ProjectWorkspace, synthesizeProjectName } from '@hollowcube/common/project'
 
 // Web reads the active project from sessionStorage (stashed per-tab). After a
 // fresh redeem the AuthProvider surfaces the granted project via context — we
@@ -23,6 +23,10 @@ function WebProjectShell() {
     useEffect(() => {
         if (projectId) setActiveProjectId(projectId)
     }, [projectId])
+
+    useEffect(() => {
+        if (projectId) platform.setWindowTitle(synthesizeProjectName(projectId))
+    }, [platform, projectId])
 
     if (!projectId) return <OpenFromGame />
     return <ProjectWorkspace projectId={projectId} />

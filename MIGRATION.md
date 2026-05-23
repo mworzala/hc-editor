@@ -51,7 +51,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 
 ---
 
-### Phase 2 — Workspace layout migration [ ]
+### Phase 2 — Workspace layout migration [x]
 
 **Goal:** move the workspace primitive (docks, splits, tabs, focus, persistence) from Zustand to a `WorkspaceLayoutService` built on signals.
 
@@ -71,7 +71,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Drag-and-drop, splits, dock toggles all work in the browser (verify via preview).
 - Zustand dependency stays (still used by document store etc.) until Phase 3.
 
-**Status notes:** _not started_
+**Status notes:** `WorkspaceLayoutService` landed under `common/src/model/workspace/` — signal-backed slices (`columnSizes`, `middleSizes`, `docksVisible`, `left`/`right`/`bottom`, `center`, `focusedLeafId`, `activeDrag`, `hoveredPaneId`) with a composite `state` computed, debounced trailing-edge persistence, schema-versioned migrations + structural validation reused verbatim from `common/src/workspace/{migrations,validate}.ts`. Service mounted on `Project` (deps now include `initialLayout`); `EditorApp.openProject(id, { initialLayout })`. React hooks file (`useLayout`, `useLayoutState`, `useColumnSizes`, `useDocksVisible`, etc.) bridges signals via the foundation `useSignal` adapter. Internal workspace primitive (`Workspace.tsx`, `EditorGroup.tsx`, `ToolDock.tsx`) consumes `useLayout()` directly; `WorkspaceContext` slimmed to host customization only (`tabRegistry`, `renderEmpty`, `renderToolDockAdd`, `onTabContextMenu`). Twelve external consumers migrated: `registry.tsx`, `tools/files.tsx`, `tools/structure.tsx`, `editors/text.tsx`, `search/SearchPopup.tsx`, `actions/EditorActions.tsx`, `actions/context.tsx`, `actions/project-actions.ts` (renamed `useProjectActionsForStore` → `useProjectActionsForLayout`), `data/tab-actions.tsx`, `lsp/ui/LspActions.tsx`, `ProjectTopBar.tsx`, `ProjectWorkspace.tsx`. New `<ProjectModelBridge>` inside `ProjectWorkspace.tsx` constructs the model `Project` via `useApp().openProject(projectId, { initialLayout })` and mounts `<ProjectProvider>` so the workspace primitive can reach `useProject().layout`. Phase 6 collapses this bridge. Old `common/src/workspace/store.ts` + `store.test.ts` + `use-workspace-store.ts` deleted. Full test parity: 28 new tests under `WorkspaceLayoutService.test.ts`. All `bun run lint` / `typecheck` / `test` green (240 pass total).
 
 ---
 

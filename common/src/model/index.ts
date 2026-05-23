@@ -1,5 +1,25 @@
-export { EditorApp, type EditorAppDeps } from './EditorApp'
+export { EditorApp, type EditorAppDeps, type OpenProjectOpts } from './EditorApp'
 export { Project, type ProjectDeps } from './Project'
+export {
+    WorkspaceLayoutService,
+    findFirstLeaf,
+    findLeaf,
+    makeId,
+    resolveTargetLeaf,
+    selectActiveContextTags,
+    selectTabLocations,
+    useActiveDrag,
+    useCenter,
+    useColumnSizes,
+    useDocksVisible,
+    useFocusedLeafId,
+    useHoveredPaneId,
+    useLayout,
+    useLayoutState,
+    useMiddleSizes,
+    type TabLocation,
+    type WorkspaceLayoutServiceDeps,
+} from './workspace'
 
 export {
     AppProvider,

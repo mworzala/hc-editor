@@ -1,16 +1,16 @@
 import { createContext, useContext, type ReactNode } from 'react'
-import { type StoreApi, type UseBoundStore } from 'zustand'
 
-import { type WorkspaceStore } from './store'
 import { type DockId, type Tab, type TabRegistry } from './types'
 
-// Removes prop-drilling of `useStore` and `tabRegistry` through Workspace →
-// ShellLayout → EditorGroup/ToolDock → leaf.
-
-export type WorkspaceStoreHook = UseBoundStore<StoreApi<WorkspaceStore>>
+// Host-supplied rendering customization for the workspace primitive.
+// State (formerly carried alongside as `useStore`) now lives on
+// `Project.layout` — consumers reach it via `useLayout()` from
+// `@hollowcube/common/model`. This context only carries the bits the
+// primitive doesn't know how to produce: the tab renderer registry, dock
+// empty-state renderer, the trailing add-tab affordance, and the
+// right-click hook.
 
 type WorkspaceContextValue = {
-    useStore: WorkspaceStoreHook
     tabRegistry: TabRegistry
     renderEmpty?: (dockId: DockId) => ReactNode
     /** Rendered at the end of a tool dock's tab bar (when it has tabs). */

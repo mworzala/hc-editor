@@ -15,13 +15,19 @@
 import type { HCClient } from '@hollowcube/api'
 
 import type { Platform } from '../platform'
+import type { WorkspaceState } from '../workspace/types'
 import { ActionRegistry } from './actions/ActionRegistry'
 import { ContextService } from './context/ContextService'
+import { WorkspaceLayoutService } from './workspace/WorkspaceLayoutService'
 
 export interface ProjectDeps {
     projectId: string
     platform: Platform
     client: HCClient
+    /** Initial workspace layout used when no persisted blob exists (or it
+     *  failed to load / failed validation). The caller owns the initial
+     *  shape because tools and editors are registered host-side. */
+    initialLayout: WorkspaceState
 }
 
 export class Project {
@@ -30,6 +36,7 @@ export class Project {
     readonly client: HCClient
     readonly context: ContextService
     readonly actions: ActionRegistry
+    readonly layout: WorkspaceLayoutService
 
     constructor(deps: ProjectDeps) {
         this.projectId = deps.projectId
@@ -39,12 +46,18 @@ export class Project {
         // reverse. `actions` depends on `context` (when-clause evaluation).
         this.context = new ContextService()
         this.actions = new ActionRegistry({ context: this.context })
+        this.layout = new WorkspaceLayoutService({
+            storage: deps.platform.storage,
+            storageKey: `hc-project:${deps.projectId}`,
+            initialState: deps.initialLayout,
+        })
     }
 
     dispose(): void {
         // Reverse construction order. Later phases will add more services
         // above the foundational two; insert their disposals at the top
         // of this method.
+        this.layout.dispose()
         this.actions.dispose()
         this.context.dispose()
     }

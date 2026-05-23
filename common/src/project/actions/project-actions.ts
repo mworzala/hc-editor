@@ -1,21 +1,20 @@
 import { useCallback } from 'react'
 
+import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
 import {
     makeId,
     resolveTargetLeaf,
     selectTabLocations,
-    useWorkspaceContext,
     type DockId,
     type Tab,
-    type WorkspaceStore,
+    type WorkspaceState,
 } from '../../workspace'
-import { type WorkspaceStoreHook } from '../../workspace/context'
 import { type AnyEditorDefinition, type ToolDefinition } from '../registry'
 import { useEditors, useTools } from '../registry-context'
 
-// Host-level actions that compose primitive store ops with project semantics
-// (tool/editor registries, mime resolution, identity matching). The workspace
-// primitive intentionally doesn't know about these concepts.
+// Host-level actions that compose primitive layout ops with project
+// semantics (tool/editor registries, mime resolution, identity matching).
+// The workspace primitive intentionally doesn't know about these concepts.
 
 export type OpenEditorTarget =
     | { kind: 'focused' } // current focused leaf, fall back to first
@@ -36,74 +35,61 @@ export type OpenEditorArgs = {
 }
 
 export type ProjectActions = {
-    /** Open an editor tab. Looks the editor up by `kind` or `mimeType`,
-     *  reuses an existing tab if `identityKey` matches, otherwise creates one. */
     openEditor: (args: OpenEditorArgs) => void
-    /** Open (or focus) a tool. Tools are singletons — if it already lives in
-     *  any dock, it's focused; otherwise created at the tool's `defaultLocation`
-     *  unless `dock` is overridden. */
     openTool: (toolKind: string, opts?: { dock?: DockId }) => void
 }
 
-/** Hook form: reads the workspace store + tools/editors from context. Must be
- *  used inside `<Workspace>`. */
+/** Hook form: reads `Project.layout` from context. Must be used inside a
+ *  `<ProjectProvider>`. */
 export function useProjectActions(): ProjectActions {
-    const { useStore } = useWorkspaceContext()
-    return useProjectActionsForStore(useStore)
+    const layout = useLayout()
+    return useProjectActionsForLayout(layout)
 }
 
-/** Hook variant for callers that hold the store hook directly (siblings of
- *  `<Workspace>`, e.g. the search popup). Tools/editors still come from the
- *  RegistryProvider, which sits outside of `<Workspace>`. */
-export function useProjectActionsForStore(useStore: WorkspaceStoreHook): ProjectActions {
+/** Hook variant for callers that hold the layout service directly. Tools
+ *  and editors still come from the RegistryProvider. */
+export function useProjectActionsForLayout(layout: WorkspaceLayoutService): ProjectActions {
     const tools = useTools()
     const editors = useEditors()
 
     const openEditor = useCallback(
         (args: OpenEditorArgs) => {
-            const store = useStore.getState()
+            const state = layout.state.peek()
             const editor = resolveEditor(editors, args)
             if (!editor) {
                 console.warn('[openEditor] no editor for', args.kind ?? args.mimeType, '— skipping')
                 return
             }
 
-            // Singleton editors (Welcome / API test / Docs): if any tab of the
-            // same kind exists, activate it instead of creating another. The
-            // payload may still drift between opens (e.g. docs tab targeting
-            // a different module), but for singletons we don't want a second
-            // instance to coexist.
             if (editor.singleton) {
-                const existing = findFirstTabOfKind(store, editor.kind)
+                const existing = findFirstTabOfKind(state, editor.kind)
                 if (existing) {
                     if (args.payload) {
                         const merged = { ...existing.tab.payload, ...args.payload }
-                        store.updateTab(existing.tab.id, { payload: merged })
+                        layout.updateTab(existing.tab.id, { payload: merged })
                     }
-                    store.activateTab({ kind: 'editor', leafId: existing.leafId }, existing.tab.id)
+                    layout.activateTab(
+                        { kind: 'editor', leafId: existing.leafId },
+                        existing.tab.id,
+                    )
                     return
                 }
             }
 
             if (args.identityKey && args.payload?.[args.identityKey] !== undefined) {
-                const match = findTabByIdentity(store, editor.kind, args.identityKey, args.payload)
+                const match = findTabByIdentity(state, editor.kind, args.identityKey, args.payload)
                 if (match) {
-                    // Merge new payload fields into the existing tab's payload
-                    // so one-shot hints like `scrollToLine` / `flashLspRange`
-                    // take effect even when the tab is being re-activated.
-                    // Identity-key value matches by construction, so this
-                    // doesn't drift the tab's identity.
                     if (args.payload) {
                         const merged = { ...match.tab.payload, ...args.payload }
-                        store.updateTab(match.tab.id, { payload: merged })
+                        layout.updateTab(match.tab.id, { payload: merged })
                     }
-                    store.activateTab({ kind: 'editor', leafId: match.leafId }, match.tab.id)
+                    layout.activateTab({ kind: 'editor', leafId: match.leafId }, match.tab.id)
                     return
                 }
             }
 
             const target = args.target ?? { kind: 'focused' }
-            const leafId = resolveOpenTargetLeaf(store, target)
+            const leafId = resolveOpenTargetLeaf(state, target)
             const payloadForTitle = editor.parsePayload
                 ? editor.parsePayload(args.payload)
                 : args.payload
@@ -115,23 +101,22 @@ export function useProjectActionsForStore(useStore: WorkspaceStoreHook): Project
                 title,
                 payload: args.payload,
             }
-            store.addTab({ kind: 'editor', leafId }, tab)
+            layout.addTab({ kind: 'editor', leafId }, tab)
         },
-        [useStore, editors],
+        [layout, editors],
     )
 
     const openTool = useCallback(
         (toolKind: string, opts?: { dock?: DockId }) => {
-            const store = useStore.getState()
             const tool = tools.find((t) => t.kind === toolKind)
             if (!tool) {
                 console.warn('[openTool] no tool with kind', toolKind)
                 return
             }
             const targetDock = opts?.dock ?? tool.defaultLocation
-            moveOrCreateTool(store, tool, targetDock)
+            moveOrCreateTool(layout, targetDock, tool)
         },
-        [useStore, tools],
+        [layout, tools],
     )
 
     return { openEditor, openTool }
@@ -151,7 +136,6 @@ function resolveEditor(
     return undefined
 }
 
-/** Exact match, or wildcard form `<type>/*` (e.g. `text/*` matches `text/plain`). */
 function matchesMime(pattern: string, mime: string): boolean {
     if (pattern === mime) return true
     if (pattern.endsWith('/*')) {
@@ -161,7 +145,7 @@ function matchesMime(pattern: string, mime: string): boolean {
     return false
 }
 
-function resolveOpenTargetLeaf(state: WorkspaceStore, target: OpenEditorTarget): string {
+function resolveOpenTargetLeaf(state: WorkspaceState, target: OpenEditorTarget): string {
     if (target.kind === 'leaf' || target.kind === 'new-tab') {
         return target.leafId
     }
@@ -169,7 +153,7 @@ function resolveOpenTargetLeaf(state: WorkspaceStore, target: OpenEditorTarget):
 }
 
 function findFirstTabOfKind(
-    state: WorkspaceStore,
+    state: WorkspaceState,
     kind: string,
 ): { leafId: string; tab: Tab } | null {
     const locations = selectTabLocations(state)
@@ -185,7 +169,7 @@ function findFirstTabOfKind(
 }
 
 function findTabByIdentity(
-    state: WorkspaceStore,
+    state: WorkspaceState,
     kind: string,
     identityKey: string,
     payload: Record<string, unknown>,
@@ -205,7 +189,7 @@ function findTabByIdentity(
     return null
 }
 
-function findLeafWalk(state: WorkspaceStore, leafId: string) {
+function findLeafWalk(state: WorkspaceState, leafId: string) {
     if (state.center.kind === 'leaf') {
         return state.center.id === leafId ? state.center : null
     }
@@ -221,15 +205,16 @@ function findLeafWalk(state: WorkspaceStore, leafId: string) {
     return null
 }
 
-function moveOrCreateTool(state: WorkspaceStore, tool: ToolDefinition, dockId: DockId) {
+function moveOrCreateTool(layout: WorkspaceLayoutService, dockId: DockId, tool: ToolDefinition) {
+    const state = layout.state.peek()
     for (const candidate of ['left', 'right', 'bottom'] as const) {
         const existing = state[candidate].tabs.find((t) => t.kind === tool.kind)
         if (!existing) continue
         if (candidate === dockId) {
-            state.activateTab({ kind: 'tool', dock: dockId }, existing.id)
+            layout.activateTab({ kind: 'tool', dock: dockId }, existing.id)
             return
         }
-        state.moveTab(
+        layout.moveTab(
             { kind: 'tool', dock: candidate },
             { kind: 'tool', dock: dockId },
             existing.id,
@@ -237,7 +222,7 @@ function moveOrCreateTool(state: WorkspaceStore, tool: ToolDefinition, dockId: D
         )
         return
     }
-    state.addTab(
+    layout.addTab(
         { kind: 'tool', dock: dockId },
         { id: makeId('tab'), kind: tool.kind, title: tool.title },
     )

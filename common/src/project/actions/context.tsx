@@ -1,7 +1,7 @@
 import { createContext, useContext, useEffect, useMemo, useRef, type ReactNode } from 'react'
 
+import { useLayoutState } from '../../model/workspace'
 import { selectActiveContextTags } from '../../workspace'
-import { type WorkspaceStoreHook } from '../../workspace/context'
 import { type WorkspaceState } from '../../workspace/types'
 import { type ActionContextSet } from './types'
 
@@ -29,21 +29,16 @@ const EMPTY: ActionContextSet = new Set(['global'])
 
 const ActionContextContext = createContext<ContextValue | null>(null)
 
-export function ActionContextProvider({
-    useStore,
-    children,
-}: {
-    useStore: WorkspaceStoreHook
-    children: ReactNode
-}) {
-    // Zustand v5 drops the equality-fn arg, so we subscribe to a stable
-    // string fingerprint that captures everything the tag set depends on,
-    // and re-derive the set only when the fingerprint changes.
-    const fingerprint = useStore((s) => contextFingerprint(s))
+export function ActionContextProvider({ children }: { children: ReactNode }) {
+    // Subscribe to layout state via the signal hook. Re-derive the tag
+    // set only when the fingerprint (which captures every input to
+    // `selectActiveContextTags`) changes.
+    const state = useLayoutState()
+    const fingerprint = useMemo(() => contextFingerprint(state), [state])
     const tags = useMemo<ActionContextSet>(
-        () => selectActiveContextTags(useStore.getState()),
+        () => selectActiveContextTags(state),
         // eslint-disable-next-line react-hooks/exhaustive-deps -- fingerprint already encodes everything we care about
-        [fingerprint, useStore],
+        [fingerprint],
     )
 
     // Mirror the latest set into a ref so non-reactive callers (hotkey bridge)

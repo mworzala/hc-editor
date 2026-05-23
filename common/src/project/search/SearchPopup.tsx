@@ -19,8 +19,8 @@ import {
 } from '@hollowcube/design-system'
 
 import { listAllLanguageMimes, useLanguages } from '../../editor/languages'
-import { type WorkspaceStoreHook } from '../../workspace/context'
-import { useProjectActionsForStore } from '../actions/project-actions'
+import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
+import { useProjectActionsForLayout } from '../actions/project-actions'
 import { useRunAction } from '../actions/registry'
 import { DOCS_EDITOR_KIND } from '../editors/docs-kind'
 import { isTextContentType } from '../tools/files-tree'
@@ -36,7 +36,7 @@ import { SEARCH_TABS, type ResultGroup, type SearchResult, type SearchTab } from
 // focus trap, ESC, and outside-click handling — we override only the
 // positioning className.
 
-export function SearchPopup({ useStore }: { useStore: WorkspaceStoreHook }) {
+export function SearchPopup() {
     const open = useSearchStore((s) => s.open)
     const close = useSearchStore((s) => s.close)
     return (
@@ -58,14 +58,15 @@ export function SearchPopup({ useStore }: { useStore: WorkspaceStoreHook }) {
                         'duration-100 data-open:animate-in data-open:fade-in-0 data-open:zoom-in-95 data-closed:animate-out data-closed:fade-out-0 data-closed:zoom-out-95',
                     )}
                 >
-                    {open ? <SearchPopupContent useStore={useStore} /> : null}
+                    {open ? <SearchPopupContent /> : null}
                 </DialogPopup>
             </DialogPortal>
         </Dialog>
     )
 }
 
-function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
+function SearchPopupContent() {
+    const layout = useLayout()
     const tab = useSearchStore((s) => s.tab)
     const setTab = useSearchStore((s) => s.setTab)
     const query = useSearchStore((s) => s.query)
@@ -83,7 +84,7 @@ function SearchPopupContent({ useStore }: { useStore: WorkspaceStoreHook }) {
         inputRef.current?.focus()
     }, [])
 
-    const invoke = useInvoke(close, useStore)
+    const invoke = useInvoke(close, layout)
 
     const onKeyDown = useCallback(
         (e: ReactKeyboardEvent<HTMLInputElement>) => {
@@ -430,9 +431,9 @@ function useActiveResult(items: readonly SearchResult[]) {
     return [current, setActive] as const
 }
 
-function useInvoke(close: () => void, useStore: WorkspaceStoreHook) {
+function useInvoke(close: () => void, layout: WorkspaceLayoutService) {
     const runAction = useRunAction()
-    const { openEditor } = useProjectActionsForStore(useStore)
+    const { openEditor } = useProjectActionsForLayout(layout)
     const languages = useLanguages()
     const languageMimes = useMemo(() => listAllLanguageMimes(languages), [languages])
     return useCallback(

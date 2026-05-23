@@ -14,12 +14,18 @@
 import type { HCClient } from '@hollowcube/api'
 
 import type { Platform } from '../platform'
+import type { WorkspaceState } from '../workspace/types'
 import { signal, type ReadonlySignal } from './foundation/signal'
 import { Project } from './Project'
 
 export interface EditorAppDeps {
     platform: Platform
     client: HCClient
+}
+
+export interface OpenProjectOpts {
+    /** Initial workspace layout used when no persisted blob exists. */
+    initialLayout: WorkspaceState
 }
 
 export class EditorApp {
@@ -34,7 +40,7 @@ export class EditorApp {
         this.client = deps.client
     }
 
-    openProject(projectId: string): Project {
+    openProject(projectId: string, opts: OpenProjectOpts): Project {
         const prior = this._currentProject.peek()
         if (prior) {
             if (prior.projectId === projectId) return prior
@@ -44,6 +50,7 @@ export class EditorApp {
             projectId,
             platform: this.platform,
             client: this.client,
+            initialLayout: opts.initialLayout,
         })
         this._currentProject.value = next
         return next

@@ -1,12 +1,7 @@
 import { type ReactNode } from 'react'
 
-import {
-    selectTabLocations,
-    useWorkspaceContext,
-    type DockId,
-    type Tab,
-    type TabRegistry,
-} from '../workspace'
+import { useLayout } from '../model/workspace'
+import { selectTabLocations, type DockId, type Tab, type TabRegistry } from '../workspace'
 import { PaneErrorBoundary } from './error-boundary'
 
 // Two registries sit above the workspace primitive's flat `TabRegistry`:
@@ -97,12 +92,11 @@ export function buildTabRegistry(
 }
 
 function PaneTabWrapper({ tab, children }: { tab: Tab; children: ReactNode }) {
-    const { useStore } = useWorkspaceContext()
+    const layout = useLayout()
     const closeTab = () => {
-        const store = useStore.getState()
-        const loc = selectTabLocations(store).get(tab.id)
+        const loc = selectTabLocations(layout.state.peek()).get(tab.id)
         if (!loc) return
-        store.closeTab(loc, tab.id)
+        layout.closeTab(loc, tab.id)
     }
     return (
         <PaneErrorBoundary resetKey={tab.id} onClose={closeTab}>

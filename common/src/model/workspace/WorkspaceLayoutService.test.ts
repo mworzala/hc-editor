@@ -1,9 +1,10 @@
 import { beforeEach, describe, expect, test } from 'bun:test'
 
-import { createMemoryStorage, type Storage } from '../platform'
-import { STORAGE_VERSION } from './migrations'
-import { createWorkspaceStore, findLeaf, selectActiveContextTags } from './store'
-import { type EditorGroupNode, type Tab, type WorkspaceState } from './types'
+import { createMemoryStorage, type Storage } from '../../platform'
+import { STORAGE_VERSION } from '../../workspace/migrations'
+import type { EditorGroupNode, Tab, WorkspaceState } from '../../workspace/types'
+import { findLeaf, selectActiveContextTags } from './tree-helpers'
+import { WorkspaceLayoutService } from './WorkspaceLayoutService'
 
 const STORAGE_KEY = 'test:workspace'
 
@@ -24,24 +25,24 @@ function makeInitial(centerLeafId = 'leaf-center'): WorkspaceState {
     }
 }
 
-function makeStore(opts?: { initialState?: WorkspaceState; storage?: Storage }) {
+function makeService(opts?: { initialState?: WorkspaceState; storage?: Storage }) {
     const storage = opts?.storage ?? createMemoryStorage()
-    return createWorkspaceStore({
+    return new WorkspaceLayoutService({
+        storage,
         storageKey: STORAGE_KEY,
         initialState: opts?.initialState ?? makeInitial(),
-        storage,
-        persistDebounceMs: 0, // write synchronously in tests
+        persistDebounceMs: 0,
     })
 }
 
 const tab = (id: string, kind = 'editor:text', title = id): Tab => ({ id, kind, title })
 
-describe('workspace store — addTab', () => {
+describe('WorkspaceLayoutService — addTab', () => {
     test('adds a tab to a tool dock and activates it', () => {
-        const store = makeStore()
-        store.getState().addTab({ kind: 'tool', dock: 'left' }, tab('t1', 'tool:files', 'Files'))
+        const svc = makeService()
+        svc.addTab({ kind: 'tool', dock: 'left' }, tab('t1', 'tool:files', 'Files'))
 
-        const { left } = store.getState()
+        const left = svc.left.peek()
         expect(left.tabs).toHaveLength(1)
         expect(left.tabs[0]!.id).toBe('t1')
         expect(left.activeId).toBe('t1')
@@ -58,51 +59,49 @@ describe('workspace store — addTab', () => {
         }
         initial.focusedLeafId = 'leaf-A'
 
-        const store = makeStore({ initialState: initial })
-        store.getState().addTab({ kind: 'editor', leafId: 'leaf-B' }, tab('t1'))
+        const svc = makeService({ initialState: initial })
+        svc.addTab({ kind: 'editor', leafId: 'leaf-B' }, tab('t1'))
 
-        expect(store.getState().focusedLeafId).toBe('leaf-B')
-        const leafB = findLeaf(store.getState().center, 'leaf-B')!
+        expect(svc.focusedLeafId.peek()).toBe('leaf-B')
+        const leafB = findLeaf(svc.center.peek(), 'leaf-B')!
         expect(leafB.tabs).toHaveLength(1)
         expect(leafB.activeId).toBe('t1')
     })
 
     test('adding to a tool dock does not move editor focus', () => {
-        const store = makeStore()
-        const before = store.getState().focusedLeafId
-        store.getState().addTab({ kind: 'tool', dock: 'left' }, tab('t1', 'tool:files'))
-        expect(store.getState().focusedLeafId).toBe(before)
+        const svc = makeService()
+        const before = svc.focusedLeafId.peek()
+        svc.addTab({ kind: 'tool', dock: 'left' }, tab('t1', 'tool:files'))
+        expect(svc.focusedLeafId.peek()).toBe(before)
     })
 })
 
-describe('workspace store — closeTab', () => {
+describe('WorkspaceLayoutService — closeTab', () => {
     test('removes the tab and falls back to the previous tab as active', () => {
         const initial = makeInitial('leaf-A')
         initial.center = leaf('leaf-A', [tab('t1'), tab('t2'), tab('t3')], 't2')
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store.getState().closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't2')
+        svc.closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't2')
 
-        const leafA = findLeaf(store.getState().center, 'leaf-A')!
+        const leafA = findLeaf(svc.center.peek(), 'leaf-A')!
         expect(leafA.tabs.map((t) => t.id)).toEqual(['t1', 't3'])
-        // active was the second tab; closing it falls back to the prior one (t1).
         expect(leafA.activeId).toBe('t1')
     })
 
     test('preserves activeId if a non-active tab is closed', () => {
         const initial = makeInitial('leaf-A')
         initial.center = leaf('leaf-A', [tab('t1'), tab('t2')], 't2')
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store.getState().closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't1')
+        svc.closeTab({ kind: 'editor', leafId: 'leaf-A' }, 't1')
 
-        const leafA = findLeaf(store.getState().center, 'leaf-A')!
+        const leafA = findLeaf(svc.center.peek(), 'leaf-A')!
         expect(leafA.activeId).toBe('t2')
     })
-
 })
 
-describe('workspace store — moveTab', () => {
+describe('WorkspaceLayoutService — moveTab', () => {
     test('moves a tab from one leaf to another and updates focus', () => {
         const initial = makeInitial('leaf-A')
         initial.center = {
@@ -113,53 +112,44 @@ describe('workspace store — moveTab', () => {
             children: [leaf('leaf-A', [tab('t1')], 't1'), leaf('leaf-B', [tab('t2')], 't2')],
         }
         initial.focusedLeafId = 'leaf-A'
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store
-            .getState()
-            .moveTab(
-                { kind: 'editor', leafId: 'leaf-A' },
-                { kind: 'editor', leafId: 'leaf-B' },
-                't1',
-                1,
-            )
+        svc.moveTab(
+            { kind: 'editor', leafId: 'leaf-A' },
+            { kind: 'editor', leafId: 'leaf-B' },
+            't1',
+            1,
+        )
 
-        const leafB = findLeaf(store.getState().center, 'leaf-B')!
+        const leafB = findLeaf(svc.center.peek(), 'leaf-B')!
         expect(leafB.tabs.map((t) => t.id)).toEqual(['t2', 't1'])
         expect(leafB.activeId).toBe('t1')
-        expect(store.getState().focusedLeafId).toBe('leaf-B')
-
-        // Source leaf is empty and gets pruned; the split collapses to a single
-        // leaf. `findLeaf(leaf-A)` should now return null.
-        expect(findLeaf(store.getState().center, 'leaf-A')).toBeNull()
+        expect(svc.focusedLeafId.peek()).toBe('leaf-B')
+        expect(findLeaf(svc.center.peek(), 'leaf-A')).toBeNull()
     })
 
     test('is a no-op when the source does not contain the tab', () => {
-        const store = makeStore()
-        const before = store.getState().center
-        store
-            .getState()
-            .moveTab(
-                { kind: 'editor', leafId: 'leaf-center' },
-                { kind: 'editor', leafId: 'leaf-center' },
-                'nope',
-                0,
-            )
-        expect(store.getState().center).toBe(before)
+        const svc = makeService()
+        const before = svc.center.peek()
+        svc.moveTab(
+            { kind: 'editor', leafId: 'leaf-center' },
+            { kind: 'editor', leafId: 'leaf-center' },
+            'nope',
+            0,
+        )
+        expect(svc.center.peek()).toBe(before)
     })
 })
 
-describe('workspace store — splitLeafWithTab', () => {
+describe('WorkspaceLayoutService — splitLeafWithTab', () => {
     test('moves the tab into a freshly split sibling leaf', () => {
         const initial = makeInitial('leaf-A')
         initial.center = leaf('leaf-A', [tab('t1'), tab('t2')], 't2')
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store
-            .getState()
-            .splitLeafWithTab('leaf-A', 'right', { kind: 'editor', leafId: 'leaf-A' }, 't2')
+        svc.splitLeafWithTab('leaf-A', 'right', { kind: 'editor', leafId: 'leaf-A' }, 't2')
 
-        const root = store.getState().center
+        const root = svc.center.peek()
         expect(root.kind).toBe('split')
         if (root.kind !== 'split') throw new Error('unreachable')
         expect(root.orientation).toBe('horizontal')
@@ -171,20 +161,17 @@ describe('workspace store — splitLeafWithTab', () => {
         expect(left.tabs.map((t) => t.id)).toEqual(['t1'])
         expect(right.tabs.map((t) => t.id)).toEqual(['t2'])
 
-        // Focus follows the new leaf.
-        expect(store.getState().focusedLeafId).toBe(right.id)
+        expect(svc.focusedLeafId.peek()).toBe(right.id)
     })
 
     test('side=top creates a vertical split with the new leaf above', () => {
         const initial = makeInitial('leaf-A')
         initial.center = leaf('leaf-A', [tab('t1'), tab('t2')], 't1')
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store
-            .getState()
-            .splitLeafWithTab('leaf-A', 'top', { kind: 'editor', leafId: 'leaf-A' }, 't2')
+        svc.splitLeafWithTab('leaf-A', 'top', { kind: 'editor', leafId: 'leaf-A' }, 't2')
 
-        const root = store.getState().center
+        const root = svc.center.peek()
         if (root.kind !== 'split') throw new Error('expected split')
         expect(root.orientation).toBe('vertical')
 
@@ -194,21 +181,21 @@ describe('workspace store — splitLeafWithTab', () => {
     })
 })
 
-describe('workspace store — updateTab', () => {
+describe('WorkspaceLayoutService — updateTab', () => {
     test('patches title and payload across every dock/leaf where the id appears', () => {
         const initial = makeInitial('leaf-A')
         initial.center = leaf('leaf-A', [tab('t1', 'editor:text', 'Old')], 't1')
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store.getState().updateTab('t1', { title: 'New', payload: { path: 'src/foo.luau' } })
+        svc.updateTab('t1', { title: 'New', payload: { path: 'src/foo.luau' } })
 
-        const leafA = findLeaf(store.getState().center, 'leaf-A')!
+        const leafA = findLeaf(svc.center.peek(), 'leaf-A')!
         expect(leafA.tabs[0]!.title).toBe('New')
         expect(leafA.tabs[0]!.payload).toEqual({ path: 'src/foo.luau' })
     })
 })
 
-describe('workspace store — focus tracking', () => {
+describe('WorkspaceLayoutService — focus tracking', () => {
     test('activateTab in an editor leaf updates focusedLeafId', () => {
         const initial = makeInitial('leaf-A')
         initial.center = {
@@ -219,10 +206,10 @@ describe('workspace store — focus tracking', () => {
             children: [leaf('leaf-A', [tab('t1')], 't1'), leaf('leaf-B', [tab('t2')], 't2')],
         }
         initial.focusedLeafId = 'leaf-A'
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        store.getState().activateTab({ kind: 'editor', leafId: 'leaf-B' }, 't2')
-        expect(store.getState().focusedLeafId).toBe('leaf-B')
+        svc.activateTab({ kind: 'editor', leafId: 'leaf-B' }, 't2')
+        expect(svc.focusedLeafId.peek()).toBe('leaf-B')
     })
 
     test('rebinds focus to the first leaf when the focused one is pruned', () => {
@@ -235,17 +222,15 @@ describe('workspace store — focus tracking', () => {
             children: [leaf('leaf-A', [tab('t1')], 't1'), leaf('leaf-B', [tab('t2')], 't2')],
         }
         initial.focusedLeafId = 'leaf-B'
-        const store = makeStore({ initialState: initial })
+        const svc = makeService({ initialState: initial })
 
-        // Close the only tab in leaf-B — it gets pruned.
-        store.getState().closeTab({ kind: 'editor', leafId: 'leaf-B' }, 't2')
+        svc.closeTab({ kind: 'editor', leafId: 'leaf-B' }, 't2')
 
-        // After pruning, the split collapses to leaf-A. Focus must rebind.
-        expect(store.getState().focusedLeafId).toBe('leaf-A')
+        expect(svc.focusedLeafId.peek()).toBe('leaf-A')
     })
 })
 
-describe('workspace store — persistence', () => {
+describe('WorkspaceLayoutService — persistence', () => {
     let storage: Storage
 
     beforeEach(() => {
@@ -253,8 +238,8 @@ describe('workspace store — persistence', () => {
     })
 
     test('persists state changes to storage', () => {
-        const store = makeStore({ storage })
-        store.getState().setColumnSizes([10, 80, 10])
+        const svc = makeService({ storage })
+        svc.setColumnSizes([10, 80, 10])
 
         const raw = storage.get(STORAGE_KEY)
         expect(raw).not.toBeNull()
@@ -263,34 +248,26 @@ describe('workspace store — persistence', () => {
     })
 
     test('restores state from storage on construction', () => {
-        const first = makeStore({ storage })
-        first.getState().setColumnSizes([5, 90, 5])
+        const first = makeService({ storage })
+        first.setColumnSizes([5, 90, 5])
 
-        // Now create a fresh store with the same storage; it should pick up the
-        // persisted columnSizes (not the initial state).
-        const second = makeStore({ storage })
-        expect(second.getState().columnSizes).toEqual([5, 90, 5])
+        const second = makeService({ storage })
+        expect(second.columnSizes.peek()).toEqual([5, 90, 5])
     })
 
     test('reset clears storage and reverts to initial state', () => {
         const initial = makeInitial('leaf-A')
-        const store = makeStore({ initialState: initial, storage })
-        store.getState().setColumnSizes([5, 90, 5])
+        const svc = makeService({ initialState: initial, storage })
+        svc.setColumnSizes([5, 90, 5])
 
-        store.getState().reset()
+        svc.reset()
 
-        expect(store.getState().columnSizes).toEqual(initial.columnSizes)
+        expect(svc.columnSizes.peek()).toEqual(initial.columnSizes)
         expect(storage.get(STORAGE_KEY)).toBeNull()
     })
 })
 
-describe('workspace store — corrupt persisted state recovery', () => {
-    // localStorage corruption is routine (tab killed mid-write, quota trip,
-    // schema drift between two builds a tester switches between, a future
-    // STORAGE_VERSION bump). A blob that parses but is structurally wrong
-    // would crash the store on first render and a reload would re-read the
-    // same poison — an unrecoverable loop. The store must instead boot to the
-    // default layout and drop the poison so the next load starts clean.
+describe('WorkspaceLayoutService — corrupt persisted state recovery', () => {
     const poison: Array<[string, string]> = [
         ['not json', '{not json'],
         ['structurally empty', JSON.stringify({ version: STORAGE_VERSION, state: {} })],
@@ -317,21 +294,20 @@ describe('workspace store — corrupt persisted state recovery', () => {
         storage.set(STORAGE_KEY, raw)
 
         const initial = makeInitial('leaf-default')
-        const store = makeStore({ initialState: initial, storage })
+        const svc = makeService({ initialState: initial, storage })
 
-        expect(store.getState().columnSizes).toEqual(initial.columnSizes)
-        expect(store.getState().center).toEqual(initial.center)
-        // Poison removed so the next construction doesn't re-read it.
+        expect(svc.columnSizes.peek()).toEqual(initial.columnSizes)
+        expect(svc.center.peek()).toEqual(initial.center)
         expect(storage.get(STORAGE_KEY)).toBeNull()
     })
 
     test('valid persisted state is still restored (guard is not over-eager)', () => {
         const storage = createMemoryStorage()
-        const first = makeStore({ storage })
-        first.getState().setColumnSizes([5, 90, 5])
+        const first = makeService({ storage })
+        first.setColumnSizes([5, 90, 5])
 
-        const second = makeStore({ storage })
-        expect(second.getState().columnSizes).toEqual([5, 90, 5])
+        const second = makeService({ storage })
+        expect(second.columnSizes.peek()).toEqual([5, 90, 5])
         expect(storage.get(STORAGE_KEY)).not.toBeNull()
     })
 })
@@ -347,7 +323,7 @@ describe('selectActiveContextTags', () => {
         const initial = makeInitial()
         initial.left.tabs.push(tab('t1', 'tool:files'))
         initial.right.tabs.push(tab('t2', 'tool:terminal'))
-        initial.bottom.tabs.push(tab('t3', 'tool:files')) // duplicate kind
+        initial.bottom.tabs.push(tab('t3', 'tool:files'))
 
         const tags = selectActiveContextTags(initial)
         expect(tags.has('tool:files')).toBe(true)
@@ -364,12 +340,33 @@ describe('selectActiveContextTags', () => {
 
     test('does not add editor:<kind> when the focused tab is a tool', () => {
         const initial = makeInitial('leaf-A')
-        // A tool tab in the editor area would be unusual but the guard exists,
-        // so test that it holds.
         initial.center = leaf('leaf-A', [tab('t1', 'tool:files')], 't1')
 
         const tags = selectActiveContextTags(initial)
-        expect(tags.has('tool:files')).toBe(false) // tool tags only come from docks
+        expect(tags.has('tool:files')).toBe(false)
         expect(tags.has('editor:tool:files')).toBe(false)
+    })
+})
+
+describe('WorkspaceLayoutService — disposal', () => {
+    test('dispose is idempotent', () => {
+        const svc = makeService()
+        svc.dispose()
+        svc.dispose()
+    })
+
+    test('after dispose no further persistence writes happen', () => {
+        const storage = createMemoryStorage()
+        const svc = new WorkspaceLayoutService({
+            storage,
+            storageKey: STORAGE_KEY,
+            initialState: makeInitial(),
+            persistDebounceMs: 0,
+        })
+        svc.setColumnSizes([10, 80, 10])
+        const before = storage.get(STORAGE_KEY)
+        svc.dispose()
+        svc.setColumnSizes([20, 60, 20])
+        expect(storage.get(STORAGE_KEY)).toBe(before!)
     })
 })

@@ -2,8 +2,8 @@ import { useCallback, useMemo } from 'react'
 
 import { getActiveEditor } from '../../editor/active-editor-registry'
 import { runFormatOnView } from '../../editor/formatters'
+import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
 import { findLeaf } from '../../workspace'
-import { type WorkspaceStoreHook } from '../../workspace/context'
 import { useRegisterAction } from './registry'
 import { type Action } from './types'
 
@@ -19,8 +19,8 @@ import { type Action } from './types'
 //                        action is also visible to the search popup and the
 //                        native macOS menu.
 
-function focusedEntry(useStore: WorkspaceStoreHook) {
-    const state = useStore.getState()
+function focusedEntry(layout: WorkspaceLayoutService) {
+    const state = layout.state.peek()
     const leafId = state.focusedLeafId
     if (!leafId) return null
     const leaf = findLeaf(state.center, leafId)
@@ -28,18 +28,20 @@ function focusedEntry(useStore: WorkspaceStoreHook) {
     return getActiveEditor(leaf.activeId) ?? null
 }
 
-export function EditorActions({ useStore }: { useStore: WorkspaceStoreHook }) {
+export function EditorActions() {
+    const layout = useLayout()
+
     const runFormat = useCallback(() => {
-        const entry = focusedEntry(useStore)
+        const entry = focusedEntry(layout)
         if (!entry) return
         void runFormatOnView(entry.view, entry.language)
-    }, [useStore])
+    }, [layout])
 
     const runSave = useCallback(() => {
-        const entry = focusedEntry(useStore)
+        const entry = focusedEntry(layout)
         if (!entry?.save) return
         void entry.save()
-    }, [useStore])
+    }, [layout])
 
     const formatAction = useMemo<Action>(
         () => ({

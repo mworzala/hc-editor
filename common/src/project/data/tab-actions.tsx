@@ -8,16 +8,15 @@ import {
     DropdownMenuSeparator,
 } from '@hollowcube/design-system'
 
+import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
 import { usePlatform } from '../../platform'
 import {
     findFirstLeaf,
     findLeaf,
-    selectTabLocations,
     type Tab,
     type TabLocation,
-    type WorkspaceStore,
+    type WorkspaceState,
 } from '../../workspace'
-import { type WorkspaceStoreHook } from '../../workspace/context'
 import { useRegisterAction } from '../actions'
 
 // Host-level tab actions. Two surfaces:
@@ -54,7 +53,8 @@ function pointRect(x: number, y: number): DOMRect {
 
 // --- ContextMenu host ---
 
-export function useTabContextMenu({ useStore }: { useStore: WorkspaceStoreHook }) {
+export function useTabContextMenu() {
+    const layout = useLayout()
     const [state, setState] = useState<TabCtxState>({ open: false })
 
     const onTabContextMenu = useCallback(
@@ -67,7 +67,7 @@ export function useTabContextMenu({ useStore }: { useStore: WorkspaceStoreHook }
     const close = useCallback(() => setState({ open: false }), [])
 
     const node = state.open ? (
-        <TabContextMenu state={state} onClose={close} useStore={useStore} />
+        <TabContextMenu state={state} onClose={close} layout={layout} />
     ) : null
 
     return { onTabContextMenu, node }
@@ -76,11 +76,11 @@ export function useTabContextMenu({ useStore }: { useStore: WorkspaceStoreHook }
 function TabContextMenu({
     state,
     onClose,
-    useStore,
+    layout,
 }: {
     state: Extract<TabCtxState, { open: true }>
     onClose: () => void
-    useStore: WorkspaceStoreHook
+    layout: WorkspaceLayoutService
 }) {
     const anchor = useMemo<VirtualElement>(
         () => ({ getBoundingClientRect: () => pointRect(state.x, state.y) }),
@@ -88,7 +88,10 @@ function TabContextMenu({
     )
 
     const loc = useMemo(() => paneIdToLocation(state.paneId), [state.paneId])
-    const siblings = useMemo(() => listSiblingIds(useStore.getState(), loc), [useStore, loc])
+    const siblings = useMemo(
+        () => listSiblingIds(layout.state.peek(), loc),
+        [layout, loc],
+    )
     const targetIdx = siblings.indexOf(state.tabId)
     const hasLeft = targetIdx > 0
     const hasRight = targetIdx !== -1 && targetIdx < siblings.length - 1
@@ -98,7 +101,7 @@ function TabContextMenu({
         // Close in reverse order so indices stay stable (closeTab prunes empty
         // leaves; with reverse order the surviving ids stay in their slots).
         for (const id of ids.toReversed()) {
-            useStore.getState().closeTab(loc, id)
+            layout.closeTab(loc, id)
         }
         onClose()
     }
@@ -144,7 +147,7 @@ function paneIdToLocation(paneId: string): TabLocation {
     return { kind: 'editor', leafId }
 }
 
-function listSiblingIds(state: WorkspaceStore, loc: TabLocation): string[] {
+function listSiblingIds(state: WorkspaceState, loc: TabLocation): string[] {
     if (loc.kind === 'tool') {
         return state[loc.dock].tabs.map((t) => t.id)
     }
@@ -154,17 +157,16 @@ function listSiblingIds(state: WorkspaceStore, loc: TabLocation): string[] {
 
 // --- Ctrl/Cmd+W action (desktop only) ---
 
-export function CloseFocusedTabAction({ useStore }: { useStore: WorkspaceStoreHook }) {
+export function CloseFocusedTabAction() {
     const { kind: platform } = usePlatform()
+    const layout = useLayout()
 
     const handler = useCallback(() => {
-        const store = useStore.getState()
-        // Look up the focused leaf's active tab. On the web the browser owns
-        // Ctrl+W, but we still register on desktop where the binding is free.
-        const focused = focusedLeafTab(store)
+        const state = layout.state.peek()
+        const focused = focusedLeafTab(state)
         if (!focused) return
-        store.closeTab({ kind: 'editor', leafId: focused.leafId }, focused.tab.id)
-    }, [useStore])
+        layout.closeTab({ kind: 'editor', leafId: focused.leafId }, focused.tab.id)
+    }, [layout])
 
     const action = useMemo(
         () => ({
@@ -193,7 +195,7 @@ function NoopRegister(_props: { action: unknown }): ReactNode {
     return null
 }
 
-function focusedLeafTab(state: WorkspaceStore): { leafId: string; tab: Tab } | null {
+function focusedLeafTab(state: WorkspaceState): { leafId: string; tab: Tab } | null {
     const focusedId = state.focusedLeafId
     let leafId = focusedId
     let leaf = focusedId ? findLeaf(state.center, focusedId) : null
@@ -205,6 +207,3 @@ function focusedLeafTab(state: WorkspaceStore): { leafId: string; tab: Tab } | n
     if (!active || !leafId) return null
     return { leafId, tab: active }
 }
-
-// Silence unused-import warnings if a tree-shake removes the helper.
-void selectTabLocations

@@ -3,9 +3,9 @@ import { PanelBottomIcon, PanelLeftIcon, PanelRightIcon, SettingsIcon } from 'lu
 
 import { Button, cn } from '@hollowcube/design-system'
 
+import { useDocksVisible, useLayout } from '../model/workspace'
 import { usePlatform } from '../platform'
 import { type DockId } from '../workspace'
-import { type WorkspaceStoreHook } from '../workspace/context'
 import { useProject } from './context'
 import { ConnectionIndicator } from './data/connection-indicator'
 
@@ -23,15 +23,12 @@ const noDragRegionStyle = {
     WebkitAppRegion: 'no-drag',
 } as CSSProperties
 
-type ProjectTopBarProps = {
-    useStore: WorkspaceStoreHook
-}
-
-export function ProjectTopBar({ useStore }: ProjectTopBarProps) {
+export function ProjectTopBar() {
     const project = useProject()
     const { kind: platform } = usePlatform()
-    const state = useStore()
-    const { docksVisible, toggleDock } = state
+    const layout = useLayout()
+    const docksVisible = useDocksVisible()
+    const toggleDock = (dock: DockId) => layout.toggleDock(dock)
 
     const isDesktop = platform === 'desktop'
 

@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { HCClientProvider } from '@hollowcube/api'
 import { TooltipProvider } from '@hollowcube/design-system'
@@ -8,14 +8,10 @@ import { LanguageProvider } from '../editor/languages'
 import { EngineApiProvider } from '../engine-api'
 import { LuauLspProvider } from '../lsp'
 import { LspActions, LspUiOverlay, LspUiProvider } from '../lsp/ui'
-import {
-    makeId,
-    resolveTargetLeaf,
-    useWorkspaceStore,
-    Workspace,
-    type DockId,
-} from '../workspace'
-import { type WorkspaceStoreHook } from '../workspace/context'
+import { useApp } from '../model'
+import { ProjectProvider as ModelProjectProvider } from '../model/foundation/react'
+import { useLayout } from '../model/workspace'
+import { makeId, resolveTargetLeaf, Workspace, type DockId } from '../workspace'
 import {
     ActionContextProvider,
     ActionHotkeyBridge,
@@ -50,11 +46,6 @@ import { lspLogTool } from './tools/lsp-log'
 import { problemsTool } from './tools/problems'
 import { structureTool } from './tools/structure'
 
-// The workspace storage key encodes the project id so per-project layout
-// state is naturally isolated. Callers supply the id — web reads it from
-// sessionStorage in its page shell, desktop reads it from the URL.
-const workspaceStorageKey = (projectId: string) => `hc-project:${projectId}`
-
 const TOOLS: readonly ToolDefinition[] = [filesTool, structureTool, problemsTool, lspLogTool]
 const EDITORS: readonly AnyEditorDefinition[] = [
     welcomeEditor,
@@ -64,11 +55,6 @@ const EDITORS: readonly AnyEditorDefinition[] = [
 ]
 
 export function ProjectWorkspace({ projectId }: { projectId: string }) {
-    // The HCClient is owned by <AuthProvider> (constructed with the DPoP auth
-    // hook). The `/v1` prefix is owned by the API client; baseUrl is just the
-    // host root — empty on web (Vite proxies same-origin `/v1`), absolute on
-    // desktop to bypass the `wails://` scheme handler (WebKit bug 192315).
-    // This component assumes its caller has already passed an <AuthGate>.
     const { client } = useAuth()
 
     return (
@@ -97,9 +83,11 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                                                                 <LspUiProvider>
                                                                     <LspBufferBridge />
                                                                     <LspWatchedFilesBridge />
-                                                                    <ProjectWorkspaceInner
+                                                                    <ProjectModelBridge
                                                                         projectId={projectId}
-                                                                    />
+                                                                    >
+                                                                        <ProjectWorkspaceInner />
+                                                                    </ProjectModelBridge>
                                                                 </LspUiProvider>
                                                             </LuauLspProvider>
                                                         </ProjectGate>
@@ -118,31 +106,61 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
     )
 }
 
-function ProjectWorkspaceInner({ projectId }: { projectId: string }) {
-    const useStore = useWorkspaceStore({
-        storageKey: workspaceStorageKey(projectId),
-        initialState: createInitialWorkspaceState(),
-    })
+// Phase 2 bridge: constructs the model-layer `Project` once via
+// `app.openProject(projectId, ...)` and exposes it through
+// `<ProjectProvider>` so workspace consumers can reach `useProject().layout`.
+// Phase 6 will collapse this into the page shell.
+function ProjectModelBridge({
+    projectId,
+    children,
+}: {
+    projectId: string
+    children: React.ReactNode
+}) {
+    const app = useApp()
+    const initialLayout = useMemo(() => createInitialWorkspaceState(), [])
+    const projectRef = useRef<ReturnType<typeof app.openProject> | null>(null)
+    const [, forceRender] = useState(0)
+
+    useEffect(() => {
+        const project = app.openProject(projectId, { initialLayout })
+        projectRef.current = project
+        forceRender((n) => n + 1)
+        return () => {
+            // If the current project on the app is the one we opened,
+            // close it; otherwise a sibling already replaced it.
+            if (app.currentProject.peek() === project) {
+                app.closeProject()
+            }
+            if (projectRef.current === project) projectRef.current = null
+        }
+    }, [app, projectId, initialLayout])
+
+    const project = projectRef.current
+    if (!project) return null
+    return <ModelProjectProvider project={project}>{children}</ModelProjectProvider>
+}
+
+function ProjectWorkspaceInner() {
     const tabRegistry = useTabRegistry()
-    const tabContextMenu = useTabContextMenu({ useStore })
+    const tabContextMenu = useTabContextMenu()
 
     const renderEmpty = useCallback((dockId: DockId) => <EmptyDockContent dockId={dockId} />, [])
     const renderToolDockAdd = useCallback((dockId: DockId) => <ToolDockAdd dockId={dockId} />, [])
 
     return (
-        <ActionContextProvider useStore={useStore}>
+        <ActionContextProvider>
             <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
-                <NewFileAction useStore={useStore} />
-                <CloseFocusedTabAction useStore={useStore} />
-                <EditorActions useStore={useStore} />
-                <LspActions useStore={useStore} />
+                <NewFileAction />
+                <CloseFocusedTabAction />
+                <EditorActions />
+                <LspActions />
                 <SearchActions />
                 <ActionHotkeyBridge />
                 <NativeMenuBridge />
-                <ProjectTopBar useStore={useStore} />
+                <ProjectTopBar />
                 <div className='min-h-0 flex-1'>
                     <Workspace
-                        useStore={useStore}
                         tabRegistry={tabRegistry}
                         renderEmpty={renderEmpty}
                         renderToolDockAdd={renderToolDockAdd}
@@ -150,7 +168,7 @@ function ProjectWorkspaceInner({ projectId }: { projectId: string }) {
                     />
                 </div>
                 {tabContextMenu.node}
-                <SearchPopup useStore={useStore} />
+                <SearchPopup />
                 <LspUiOverlay />
             </div>
         </ActionContextProvider>
@@ -196,18 +214,16 @@ function formatErr(err: unknown): string {
     return String(err)
 }
 
-// Registers Cmd/Ctrl+N → new untitled text file. Mounted as a sibling to
-// `<Workspace>` (so `useWorkspaceContext` isn't available); we call the
-// workspace store directly via the `useStore` prop and reach the focused leaf
-// using the same selector that `useProjectActions` would.
-function NewFileAction({ useStore }: { useStore: WorkspaceStoreHook }) {
+// Registers Cmd/Ctrl+N → new untitled text file. Reads the focused leaf
+// from `Project.layout` directly so it works for siblings of `<Workspace>`.
+function NewFileAction() {
     const pendingStore = usePendingFilesStore()
+    const layout = useLayout()
 
     const handler = useCallback(() => {
         const tempId = pendingStore.getState().addUntitled()
-        const store = useStore.getState()
-        const leaf = resolveTargetLeaf(store)
-        store.addTab(
+        const leaf = resolveTargetLeaf(layout.state.peek())
+        layout.addTab(
             { kind: 'editor', leafId: leaf.id },
             {
                 id: makeId('tab'),
@@ -216,7 +232,7 @@ function NewFileAction({ useStore }: { useStore: WorkspaceStoreHook }) {
                 payload: { tempId },
             },
         )
-    }, [pendingStore, useStore])
+    }, [pendingStore, layout])
 
     const action = useMemo(
         () => ({

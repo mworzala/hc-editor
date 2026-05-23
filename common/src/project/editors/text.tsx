@@ -33,7 +33,8 @@ import {
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
 import { useEngineApi } from '../../engine-api'
 import { useLuauLsp } from '../../lsp'
-import { type Tab, useWorkspaceContext } from '../../workspace'
+import { useLayout } from '../../model/workspace'
+import { type Tab } from '../../workspace'
 import { useProjectActions } from '../actions'
 import { useProject } from '../context'
 import { usePendingFile, usePendingFilesStore } from '../data/pending-files'
@@ -162,7 +163,7 @@ export const textEditor: EditorDefinition = {
 
 function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const project = useProject()
-    const { useStore } = useWorkspaceContext()
+    const layout = useLayout()
     const documentStore = useDocumentStore()
     const pendingStore = usePendingFilesStore()
     const updateMutation = useV1MapFilesUpdate()
@@ -371,7 +372,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const initialFlashLspRange = payload.flashLspRange
     useEffect(() => {
         if (initialScrollToLine === undefined && initialFlashLspRange === undefined) return
-        useStore.getState().updateTab(tab.id, {
+        layout.updateTab(tab.id, {
             payload: { path: payload.path, tempId: payload.tempId },
         })
         // eslint-disable-next-line react-hooks/exhaustive-deps -- intentional: scrub on each new hint
@@ -416,7 +417,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                 }
                 if (payload.tempId) pendingStore.getState().remove(payload.tempId)
                 // Patch the tab: drop tempId, point at path.
-                useStore.getState().updateTab(tab.id, {
+                layout.updateTab(tab.id, {
                     title: basename(path),
                     payload: { path },
                 })
@@ -435,7 +436,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
             project.id,
             tab.id,
             updateMutation,
-            useStore,
+            layout,
         ],
     )
 

@@ -6,8 +6,8 @@ import { FileTree, type FileTreeNode, Input, ScrollArea } from '@hollowcube/desi
 
 import { listAllLanguageMimes, useLanguages } from '../../editor/languages'
 import { useLuauLsp, useDiagnosticPaths } from '../../lsp'
-import { findLeaf, selectTabLocations, useWorkspaceContext } from '../../workspace'
-import { type WorkspaceStoreHook } from '../../workspace/context'
+import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
+import { findLeaf, selectTabLocations } from '../../workspace'
 import { ActionContextMenu, useProjectActions } from '../actions'
 import { type Action } from '../actions/types'
 import { useProject } from '../context'
@@ -42,7 +42,7 @@ function FilesPane() {
     const pendingStore = usePendingFilesStore()
     const { openEditor } = useProjectActions()
     const deleteMutation = useV1MapFilesDelete()
-    const { useStore } = useWorkspaceContext()
+    const layout = useLayout()
     const languages = useLanguages()
     const languageMimes = useMemo(() => listAllLanguageMimes(languages), [languages])
     const { client: lspClient } = useLuauLsp()
@@ -141,22 +141,22 @@ function FilesPane() {
                 documentStore.getState().openDocument(newPath, docs[oldPath].current)
                 documentStore.getState().closeDocument(oldPath, { force: true })
             }
-            const store = useStore.getState()
-            const locations = selectTabLocations(store)
+            const state = layout.state.peek()
+            const locations = selectTabLocations(state)
             for (const [tabId, loc] of locations) {
                 if (!loc || loc.kind !== 'editor') continue
-                const leaf = findLeaf(store.center, loc.leafId)
+                const leaf = findLeaf(state.center, loc.leafId)
                 const tab = leaf?.tabs.find((t) => t.id === tabId)
                 if (!tab || tab.kind !== TEXT_EDITOR_KIND) continue
                 const tabPath = (tab.payload as { path?: string } | undefined)?.path
                 if (tabPath !== oldPath) continue
-                store.updateTab(tabId, {
+                layout.updateTab(tabId, {
                     title: newPath.split('/').pop() ?? newPath,
                     payload: { ...tab.payload, path: newPath },
                 })
             }
         },
-        [documentStore, filesByPath, hcClient, pendingStore, project.id, useStore],
+        [documentStore, filesByPath, hcClient, pendingStore, project.id, layout],
     )
 
     const handleCommitRename = useCallback(
@@ -295,10 +295,10 @@ function FilesPane() {
             // beneath it for a deleted folder) BEFORE issuing the delete. The
             // tab unmount cancels the editor's pending autosave timer, so we
             // don't race the delete with a save that would resurrect the file.
-            closeTabsForPath(useStore, path)
+            closeTabsForPath(layout, path)
             deleteMutation.mutate({ mapId: project.id, path })
         },
-        [deleteMutation, project.id, useStore],
+        [deleteMutation, project.id, layout],
     )
 
     // Keyboard handler on the scroll container: Delete removes the selection,
@@ -400,13 +400,13 @@ function FilesPane() {
 /** Close every text editor tab whose path equals `target` or sits beneath it
  *  (folder delete). Closing happens before the server mutation so the editor
  *  unmounts and cancels its autosave timer ahead of the delete. */
-function closeTabsForPath(useStore: WorkspaceStoreHook, target: string) {
-    const store = useStore.getState()
-    const locations = selectTabLocations(store)
+function closeTabsForPath(layout: WorkspaceLayoutService, target: string) {
+    const state = layout.state.peek()
+    const locations = selectTabLocations(state)
     const matches: { tabId: string; loc: ReturnType<typeof locations.get> }[] = []
     for (const [tabId, loc] of locations) {
         if (!loc || loc.kind !== 'editor') continue
-        const leaf = findLeaf(store.center, loc.leafId)
+        const leaf = findLeaf(state.center, loc.leafId)
         const tab = leaf?.tabs.find((t) => t.id === tabId)
         if (!tab || tab.kind !== TEXT_EDITOR_KIND) continue
         const tabPath = (tab.payload as { path?: string } | undefined)?.path
@@ -416,7 +416,7 @@ function closeTabsForPath(useStore: WorkspaceStoreHook, target: string) {
         }
     }
     for (const { tabId, loc } of matches) {
-        if (loc) store.closeTab(loc, tabId)
+        if (loc) layout.closeTab(loc, tabId)
     }
 }
 

@@ -22,7 +22,7 @@ export { NativeMenuBridge } from './NativeMenuBridge'
 // space: "things the host can do for you."
 export {
     useProjectActions,
-    useProjectActionsForStore,
+    useProjectActionsForLayout,
     type OpenEditorArgs,
     type OpenEditorTarget,
     type ProjectActions,

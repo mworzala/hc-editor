@@ -23,8 +23,8 @@ import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
 import { useLuauLsp } from '../../lsp'
 import { rangeToOffsets } from '../../lsp/cm/lspUtils'
 import { type LspClient } from '../../lsp/LspClient'
+import { useLayout } from '../../model/workspace'
 import { findLeaf, type Tab, type WorkspaceState } from '../../workspace'
-import { useWorkspaceContext } from '../../workspace/context'
 import { type ToolDefinition } from '../registry'
 
 // "Structure" tool — outline view of the currently focused text editor.
@@ -46,17 +46,19 @@ type FocusedDoc = {
 }
 
 function StructurePane() {
-    const { useStore } = useWorkspaceContext()
+    const layout = useLayout()
     const { client, status } = useLuauLsp()
-    const [focused, setFocused] = useState<FocusedDoc | null>(() => readFocus(useStore.getState()))
+    const [focused, setFocused] = useState<FocusedDoc | null>(() =>
+        readFocus(layout.state.peek()),
+    )
 
-    // Track focused-leaf changes by subscribing to the workspace store.
+    // Track focused-leaf changes by subscribing to the layout state signal.
     useEffect(() => {
-        return useStore.subscribe((state) => {
-            const next = readFocus(state)
+        return layout.state.subscribe(() => {
+            const next = readFocus(layout.state.peek())
             setFocused((prev) => (sameFocus(prev, next) ? prev : next))
         })
-    }, [useStore])
+    }, [layout])
 
     return (
         <div className='flex h-full flex-col'>

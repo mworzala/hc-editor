@@ -17,8 +17,9 @@
         "deploy:web": "bun --filter @hollowcube/web build && bun --filter @hollowcube/web deploy",
         "typecheck": "bun --filter '*' typecheck",
         "test": "bun --filter '*' test",
-        "lint": "oxlint",
+        "lint": "oxlint && bun run scripts/lint-signals.ts",
         "lint:fix": "oxlint --fix",
+        "lint:signals": "bun run scripts/lint-signals.ts",
         "format": "oxfmt",
         "format:check": "oxfmt --check"
     },

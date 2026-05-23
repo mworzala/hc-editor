@@ -6,6 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A web + desktop editor for authoring Luau scripts that run on a Minecraft server's Luau-based server-side scripting engine. Users join the server and then open the web or desktop editor to work on their project. The UI is loosely modelled after JetBrains Fleet "Islands" — a workspace with tool docks on the left/bottom/right and editor panels in the center that split/nest.
 
+## Target model architecture (read first)
+
+**The codebase is migrating** from a React-context-heavy architecture (deeply nested provider tower, model state spread across providers/hooks) to a **services + signals + actions** architecture. Full design doc: [`docs/model-architecture.md`](docs/model-architecture.md). Read it before designing new model code or refactoring existing services. The current code is being moved toward this target progressively.
+
+**Migration roadmap:** [`MIGRATION.md`](MIGRATION.md) lists the seven phases of the transition with status checkboxes. Read it to know what's been migrated, what's in flight, and what's still on the old architecture. **When you complete a migration phase, update the status checkbox and the "Status notes" line under that phase.** When you complete a sub-task within a phase, leave a status note so the next session can pick up. Do not delete completed phases — the doc is also the record.
+
+The five principles in short:
+
+1. **Services are plain TypeScript classes.** No React imports anywhere under `common/src/model/**`. Constructor-injected deps. `dispose()` on every service.
+2. **State is held in `@preact/signals-core` signals.** Public exposure is `ReadonlySignal<T>`; writes go through service methods. Cross-service derived state is `computed(() => ...)`. Use `.peek()` inside imperative methods (including async ones); use `.value` only inside `computed` / `effect`.
+3. **`ActionRegistry` is the universal command bus.** Every user-initiated mutation is an action with an id, optional keybinding, optional when-clause, and a `run` handler. Action handlers live on the service that owns the data — `TextModelService.constructor` registers `editor.save`. UI invokes `actions.run('editor.save')`; it does NOT call service methods directly for user actions. Direct service method calls are fine for non-user-initiated work (component mount/unmount, internal coordination).
+4. **`ContextService` holds reactive context keys.** When-clauses like `editorFocused && editorDirty` are evaluated against it. Most keys are derived from other signals via `context.derive(key, fn)`; a few (like `editorFocused`) are pushed in by React via `context.set(key, value)`. The action registry recomputes enabled actions when context signals change.
+5. **React is the thin view layer.** Two providers (`<AppProvider>`, `<ProjectProvider>`), one signal adapter hook (`useSignal`), and tiny per-service hooks files (`textModels/react.ts`). Components read via hooks, mutate via `actions.run(...)`, manage view-local state with `useState`. CodeMirror state (cursor, selection, scroll) lives in CodeMirror, not in services.
+
+**Canonical template:** `TextModelService` in [`docs/model-architecture.md`](docs/model-architecture.md). New services follow the same skeleton (typed deps, signals as state, methods as mutations, actions + context keys registered at construction, `Emitter` for discrete events, disposal in reverse order).
+
+**Anti-patterns to avoid** (full list in the doc): importing React from a service, using `.value` in imperative methods, storing model state in React component state, calling service methods directly for user-initiated actions, mutating public signals from outside their service, building UI logic in a service, forgetting `dispose()`.
+
 ## Workspace topology
 
 This is a Bun-managed monorepo (`bun.lock`, `workspaces` in root `package.json`) with five packages:

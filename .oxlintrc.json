@@ -87,5 +87,32 @@
         "desktop/frontend/bindings/**",
         "desktop/build/bin/**",
         "**/.vite/**"
+    ],
+    "overrides": [
+        {
+            "files": ["common/src/model/**/*.ts", "common/src/model/**/*.tsx"],
+            "rules": {
+                "no-restricted-imports": ["error", {
+                    "paths": [
+                        { "name": "react", "message": "Model services must not import React. Hooks belong in a sibling `react.ts` file. See docs/model-architecture.md." },
+                        { "name": "react-dom", "message": "Model services must not import React. See docs/model-architecture.md." },
+                        { "name": "@base-ui/react", "message": "UI primitives belong in components, not model services." }
+                    ],
+                    "patterns": ["react/*", "react-dom/*"]
+                }],
+                "no-underscore-dangle": "off"
+            }
+        },
+        {
+            "files": [
+                "common/src/model/**/react.ts",
+                "common/src/model/**/react.tsx",
+                "common/src/model/**/*.test.ts",
+                "common/src/model/**/*.test.tsx"
+            ],
+            "rules": {
+                "no-restricted-imports": "off"
+            }
+        }
     ]
 }

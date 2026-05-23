@@ -7,9 +7,5 @@ export {
     jsonLanguage,
     luauLanguage,
     LUAU_LANGUAGE_ID,
-    LanguageProvider,
-    useLanguages,
-    useLanguageById,
-    useLanguageForMime,
     listAllLanguageMimes,
 } from './languages'

@@ -2,8 +2,8 @@ import { type Extension } from '@codemirror/state'
 import { type EditorView } from '@codemirror/view'
 
 import { type EngineApiDoc } from '../../engine-api'
+import { type LspService } from '../../model/lsp/LspService'
 import { type OpenEditorArgs } from '../../project/actions/project-actions'
-import { type ProjectServices } from '../../project/services'
 import { type UsageMatch } from '../components/UsagesPopup'
 
 // Lightweight registration for a language. Carries:
@@ -66,7 +66,9 @@ export type LanguageEditorBinding = {
  *  every language: no LSP-specific types leak in. Luau's binding builds its
  *  LSP plumbing on top of these. */
 export type LanguageEditorDeps = {
-    services: ProjectServices
+    /** Model-layer LSP service. Languages that drive LSP (Luau) read the
+     *  client + diagnostics from here; non-LSP languages can ignore it. */
+    lsp: LspService
     /** Absolute path (project-relative) of the file being edited. */
     path: string
     /** LSP-style file URI matching `path`. Languages that drive LSP use this

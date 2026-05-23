@@ -10,7 +10,8 @@ import {
 
 import { Button, cn, ScrollArea } from '@hollowcube/design-system'
 
-import { useLuauLsp, type LspLogMessage, type LspRpcMessage, type LspState } from '../../lsp'
+import { type LspLogMessage, type LspRpcMessage, type LspState } from '../../lsp'
+import { useLuauLsp } from '../../model'
 import { type ToolDefinition } from '../registry'
 
 // Tool window that surfaces:

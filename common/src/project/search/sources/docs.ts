@@ -1,6 +1,7 @@
 import { useMemo } from 'react'
 
-import { useEngineApi, type EngineApiDoc, type EngineApiModule } from '../../../engine-api'
+import { type EngineApiDoc, type EngineApiModule } from '../../../engine-api'
+import { useEngineApi } from '../../../model'
 import { fuzzyScore } from '../fuzzy'
 import { type SearchResult } from '../types'
 

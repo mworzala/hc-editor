@@ -2,9 +2,6 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { TooltipProvider } from '@hollowcube/design-system'
 
-import { LanguageProvider } from '../editor/languages'
-import { EngineApiProvider } from '../engine-api'
-import { LuauLspProvider } from '../lsp'
 import { LspActions, LspUiOverlay, LspUiProvider } from '../lsp/ui'
 import { useApp } from '../model'
 import { ProjectGate } from '../model/bootstrap'
@@ -20,7 +17,6 @@ import {
     useProjectActions,
     useRegisterAction,
 } from './actions'
-import { ProjectEventsProvider } from './data/events'
 import { CloseFocusedTabAction, useTabContextMenu } from './data/tab-actions'
 import { DockAddToolButton } from './DockAddToolButton'
 import { DockEmptyState } from './DockEmptyState'
@@ -31,7 +27,6 @@ import { welcomeEditor } from './editors/welcome'
 import { ProjectErrorBoundary } from './error-boundary'
 import { createInitialWorkspaceState } from './initial-state'
 import { LspBufferBridge } from './LspBufferBridge'
-import { LspWatchedFilesBridge } from './LspWatchedFilesBridge'
 import { ProjectTopBar } from './ProjectTopBar'
 import { type AnyEditorDefinition, type ToolDefinition } from './registry'
 import { RegistryProvider, useTabRegistry, useTools } from './registry-context'
@@ -63,25 +58,16 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                     )}
                 >
                     <RegistryProvider tools={TOOLS} editors={EDITORS}>
-                        <EngineApiProvider>
-                            <LanguageProvider>
-                                <ProjectEventsProvider projectId={projectId}>
-                                    <ProjectServicesProvider>
-                                        <ServicesActionRegistryAdapter>
-                                            <TooltipProvider>
-                                                <LuauLspProvider>
-                                                    <LspUiProvider>
-                                                        <LspBufferBridge />
-                                                        <LspWatchedFilesBridge />
-                                                        <ProjectWorkspaceInner />
-                                                    </LspUiProvider>
-                                                </LuauLspProvider>
-                                            </TooltipProvider>
-                                        </ServicesActionRegistryAdapter>
-                                    </ProjectServicesProvider>
-                                </ProjectEventsProvider>
-                            </LanguageProvider>
-                        </EngineApiProvider>
+                        <ProjectServicesProvider>
+                            <ServicesActionRegistryAdapter>
+                                <TooltipProvider>
+                                    <LspUiProvider>
+                                        <LspBufferBridge />
+                                        <ProjectWorkspaceInner />
+                                    </LspUiProvider>
+                                </TooltipProvider>
+                            </ServicesActionRegistryAdapter>
+                        </ProjectServicesProvider>
                     </RegistryProvider>
                 </ProjectGate>
             </ProjectModelBridge>
@@ -92,8 +78,8 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
 // Phase 2 bridge: constructs the model-layer `Project` once via
 // `app.openProject(projectId, ...)` and exposes it through
 // `<ProjectProvider>` so workspace consumers can reach
-// `useProject().layout` / `.fileTree` / `.textModels` / etc. Phase 6 will
-// collapse this into the page shell.
+// `useProject().layout` / `.fileTree` / `.textModels` / `.lsp` / etc.
+// Phase 6 will collapse this into the page shell.
 function ProjectModelBridge({
     projectId,
     children,

@@ -24,16 +24,20 @@ import { Button, cn, Input, Label } from '@hollowcube/design-system'
 
 import { CodeEditor, type CodeEditorApi, type UsageMatch } from '../../editor'
 import {
-    useLanguageForMime,
-    useLanguageForPath,
     type DiagnosticCounts,
     type EditorServices,
     type LanguageEditorBinding,
 } from '../../editor/languages'
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
-import { useEngineApi } from '../../engine-api'
-import { useLuauLsp } from '../../lsp'
-import { useApp, useProject } from '../../model'
+import {
+    useApp,
+    useDiagnosticsForUri as modelUseDiagnosticsForUri,
+    useEngineApi,
+    useLanguageForMime,
+    useLanguageForPath,
+    useLuauLsp,
+    useProject,
+} from '../../model'
 import { usePendingFile } from '../../model/files'
 import { useSignal } from '../../model/foundation/react'
 import { useLayout } from '../../model/workspace'
@@ -41,7 +45,6 @@ import { type Tab } from '../../workspace'
 import { useProjectActions } from '../actions'
 import { renderFileIcon } from '../file-icons'
 import { type EditorDefinition } from '../registry'
-import { useProjectServices } from '../services-context'
 import { TEXT_EDITOR_KIND } from './text-kind'
 
 // Generic plain-text editor. Handles two payload shapes:
@@ -184,7 +187,6 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const layout = useLayout()
     const textModels = project.textModels
     const fileTreeFiles = useSignal(project.fileTree.files)
-    const services = useProjectServices()
     const { openEditor } = useProjectActions()
     const editorApiRef = useRef<CodeEditorApi | null>(null)
 
@@ -284,7 +286,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     const binding: LanguageEditorBinding | null = useMemo(() => {
         if (!language?.createEditorServices || !effectivePath) return null
         return language.createEditorServices({
-            services,
+            lsp: project.lsp,
             uri: fileUriFromPath(effectivePath),
             path: effectivePath,
             knownPaths,
@@ -295,7 +297,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     }, [
         language,
         effectivePath,
-        services,
+        project.lsp,
         knownPaths,
         openEditor,
         showUsagesForBinding,
@@ -719,23 +721,11 @@ function SeverityIcon({ severity }: { severity: Severity }) {
     }
 }
 
-function useDiagnosticsForUri(
-    client: ReturnType<typeof useLuauLsp>['client'],
-    uri: string | null,
-): readonly Diagnostic[] {
-    const [diags, setDiags] = useState<readonly Diagnostic[]>([])
-    useEffect(() => {
-        if (!client || !uri) {
-            setDiags([])
-            return
-        }
-        setDiags(client.getDiagnostics(uri))
-        return client.onDiagnostics((u, next) => {
-            if (u !== uri) return
-            setDiags(next)
-        })
-    }, [client, uri])
-    return diags
+function useDiagnosticsForUri(_client: unknown, uri: string | null): readonly Diagnostic[] {
+    // Delegates to the model-layer hook. `client` is accepted for
+    // back-compat with the previous call sites but ignored — the model
+    // hook reads from `Project.lsp.diagnosticsForUri(uri)`.
+    return modelUseDiagnosticsForUri(uri)
 }
 
 function SavePathPrompt({

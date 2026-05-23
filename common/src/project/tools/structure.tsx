@@ -19,10 +19,9 @@ import type {
 import { cn, ScrollArea } from '@hollowcube/design-system'
 
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
-import { useLuauLsp } from '../../lsp'
 import { rangeToOffsets } from '../../lsp/cm/lspUtils'
 import { type LspClient } from '../../lsp/LspClient'
-import { useProject } from '../../model'
+import { useLuauLsp, useProject } from '../../model'
 import { type ActiveEditorRegistry } from '../../model/active-editor'
 import { useLayout } from '../../model/workspace'
 import { findLeaf, type Tab, type WorkspaceState } from '../../workspace'

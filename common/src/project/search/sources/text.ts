@@ -2,8 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { v1MapFilesGet, type HCClient, type MapFile } from '@hollowcube/api'
 
-import { listAllLanguageMimes, useLanguages } from '../../../editor/languages'
-import { useApp, useProject } from '../../../model'
+import { useApp, useLanguageService, useProject } from '../../../model'
 import { useFileTreeService } from '../../../model/files'
 import { useSignal } from '../../../model/foundation/react'
 import { isTextContentType } from '../../tools/files-tree'
@@ -37,7 +36,7 @@ export function useTextSearchResults(query: string): TextSearchState {
     const project = useProject()
     const fileTree = useFileTreeService()
     const files = useSignal(fileTree.list)
-    const languages = useLanguages()
+    const languageSvc = useLanguageService()
 
     const [state, setState] = useState<TextSearchState>({
         results: [],
@@ -57,7 +56,7 @@ export function useTextSearchResults(query: string): TextSearchState {
         const controller = new AbortController()
         abortRef.current = controller
 
-        const languageMimes = listAllLanguageMimes(languages)
+        const languageMimes = languageSvc.allMimes()
         const textFiles = files.filter((f) => isTextContentType(f.contentType, languageMimes))
         setState({ results: [], loading: true, scanned: 0, total: textFiles.length })
 
@@ -96,7 +95,7 @@ export function useTextSearchResults(query: string): TextSearchState {
         })()
 
         return () => controller.abort()
-    }, [client, files, project.projectId, query, languages])
+    }, [client, files, project.projectId, query, languageSvc])
 
     return state
 }

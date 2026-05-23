@@ -10,7 +10,7 @@
 // bootstrap resolves.
 
 import type { HCClient, MapFile } from '@hollowcube/api'
-import { v1MapFilesDelete, v1MapFilesUpdate } from '@hollowcube/api'
+import { v1MapEditorBootstrap, v1MapFilesDelete, v1MapFilesUpdate } from '@hollowcube/api'
 
 import { computed, signal, type ReadonlySignal } from '../foundation/signal'
 
@@ -39,6 +39,14 @@ export class FileTreeService {
     })
 
     constructor(private readonly deps: FileTreeServiceDeps) {}
+
+    /** Re-fetch the editor bootstrap and replace the file map. Used by
+     *  `ServerEventsConnection` on each SSE event to mirror the
+     *  pre-Phase-3 invalidate-and-refetch behavior. */
+    async refresh(): Promise<void> {
+        const data = await v1MapEditorBootstrap(this.deps.client, this.deps.projectId)
+        this.installAll(data.files)
+    }
 
     /** Bulk replace the file set. Called by `ProjectBootstrap` once the
      *  editor-bootstrap fetch resolves. */

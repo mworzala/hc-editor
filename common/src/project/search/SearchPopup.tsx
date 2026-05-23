@@ -18,7 +18,7 @@ import {
     ScrollArea,
 } from '@hollowcube/design-system'
 
-import { listAllLanguageMimes, useLanguages } from '../../editor/languages'
+import { useLanguageService, useSearchSources } from '../../model'
 import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
 import { useProjectActionsForLayout } from '../actions/project-actions'
 import { useRunAction } from '../actions/registry'
@@ -30,7 +30,7 @@ import { useDocsResults } from './sources/docs'
 import { useFileResults } from './sources/files'
 import { useWorkspaceSymbolResults } from './sources/symbols'
 import { useTextSearchResults } from './sources/text'
-import { SEARCH_TABS, type ResultGroup, type SearchResult, type SearchTab } from './types'
+import { type ResultGroup, type SearchResult, type SearchTab } from './types'
 
 // Top-center floating popup. Renders inside base-ui's Dialog so we inherit
 // focus trap, ESC, and outside-click handling — we override only the
@@ -72,6 +72,20 @@ function SearchPopupContent() {
     const query = useSearchStore((s) => s.query)
     const setQuery = useSearchStore((s) => s.setQuery)
     const close = useSearchStore((s) => s.close)
+
+    // Tab strip derives from the SearchService registry: 'All' is always
+    // first, followed by each registered source. The 'text' tab is
+    // injected as a static option (the text-search source isn't a
+    // service registration today — it's a popup-side feature).
+    const registeredSources = useSearchSources()
+    const tabs = useMemo<readonly { id: SearchTab; label: string }[]>(() => {
+        const out: { id: SearchTab; label: string }[] = [{ id: 'all', label: 'All' }]
+        for (const src of registeredSources) {
+            out.push({ id: src.id as SearchTab, label: src.title })
+        }
+        if (!out.some((t) => t.id === 'text')) out.push({ id: 'text', label: 'Text Search' })
+        return out
+    }, [registeredSources])
 
     const { groups, textState } = useResults(tab, query)
     const flatItems = useMemo(() => groups.flatMap((g) => g.items), [groups])
@@ -121,19 +135,19 @@ function SearchPopupContent() {
             if (e.key === 'Tab') {
                 e.preventDefault()
                 e.stopPropagation()
-                const idx = SEARCH_TABS.findIndex((t) => t.id === tab)
+                const idx = tabs.findIndex((t) => t.id === tab)
                 const dir = e.shiftKey ? -1 : 1
-                const next = SEARCH_TABS[(idx + dir + SEARCH_TABS.length) % SEARCH_TABS.length]
+                const next = tabs[(idx + dir + tabs.length) % tabs.length]
                 if (next) setTab(next.id)
                 return
             }
         },
-        [activeId, flatItems, invoke, setActiveId, setTab, tab],
+        [activeId, flatItems, invoke, setActiveId, setTab, tab, tabs],
     )
 
     return (
         <>
-            <TabBar tab={tab} onChange={setTab} />
+            <TabBar tab={tab} onChange={setTab} tabs={tabs} />
             <Input
                 ref={inputRef}
                 value={query}
@@ -161,10 +175,18 @@ function SearchPopupContent() {
 
 // --- tab bar ---
 
-function TabBar({ tab, onChange }: { tab: SearchTab; onChange: (tab: SearchTab) => void }) {
+function TabBar({
+    tab,
+    onChange,
+    tabs,
+}: {
+    tab: SearchTab
+    onChange: (tab: SearchTab) => void
+    tabs: readonly { id: SearchTab; label: string }[]
+}) {
     return (
         <div className='flex items-center gap-1 px-1 pt-1' role='tablist'>
-            {SEARCH_TABS.map((t) => {
+            {tabs.map((t) => {
                 const active = t.id === tab
                 return (
                     <button
@@ -434,8 +456,8 @@ function useActiveResult(items: readonly SearchResult[]) {
 function useInvoke(close: () => void, layout: WorkspaceLayoutService) {
     const runAction = useRunAction()
     const { openEditor } = useProjectActionsForLayout(layout)
-    const languages = useLanguages()
-    const languageMimes = useMemo(() => listAllLanguageMimes(languages), [languages])
+    const languageSvc = useLanguageService()
+    const languageMimes = useMemo(() => languageSvc.allMimes(), [languageSvc])
     return useCallback(
         (result: SearchResult) => {
             switch (result.kind) {

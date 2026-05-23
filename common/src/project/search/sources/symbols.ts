@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import type { Location, SymbolInformation, WorkspaceSymbol } from 'vscode-languageserver-types'
 
-import { useLuauLsp } from '../../../lsp'
 import { pathFromFileUri } from '../../../lsp/uriResolver'
+import { useLuauLsp } from '../../../model'
 import { type SearchResult } from '../types'
 
 // `workspace/symbol` palette source. Debounced so we don't pelt the server on

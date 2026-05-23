@@ -4,9 +4,7 @@ import { FilePlusIcon, FilesIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 import { v1MapFilesGet } from '@hollowcube/api'
 import { FileTree, type FileTreeNode, Input, ScrollArea } from '@hollowcube/design-system'
 
-import { listAllLanguageMimes, useLanguages } from '../../editor/languages'
-import { useLuauLsp, useDiagnosticPaths } from '../../lsp'
-import { useApp, useProject } from '../../model'
+import { useApp, useDiagnosticPaths, useLanguageService, useProject } from '../../model'
 import {
     useFileTreeService,
     usePendingFiles,
@@ -51,10 +49,9 @@ function FilesPane() {
     const textModels = project.textModels
     const { openEditor } = useProjectActions()
     const layout = useLayout()
-    const languages = useLanguages()
-    const languageMimes = useMemo(() => listAllLanguageMimes(languages), [languages])
-    const { client: lspClient } = useLuauLsp()
-    const errorPaths = useDiagnosticPaths(lspClient, 1)
+    const languageSvc = useLanguageService()
+    const languageMimes = useMemo(() => languageSvc.allMimes(), [languageSvc])
+    const errorPaths = useDiagnosticPaths()
 
     const [ctx, setCtx] = useState<CtxMenuState>({ open: false })
     const [newFile, setNewFile] = useState<NewFileTarget>(null)

@@ -9,11 +9,6 @@ export {
 export { jsonLanguage } from './json'
 export { luauLanguage, LUAU_LANGUAGE_ID } from './luau'
 export {
-    LanguageProvider,
-    useLanguages,
-    useLanguageById,
-    useLanguageForMime,
-    useLanguageForPath,
     resolveLanguageForMime,
     resolveLanguageForPath,
     listAllLanguageMimes,

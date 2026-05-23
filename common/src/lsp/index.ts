@@ -16,7 +16,6 @@ export {
     type RegistrationsListener,
     type ServerCapabilities,
 } from './LspClient'
-export { LuauLspProvider, useLuauLsp, type LuauLspContextValue } from './LuauLspContext'
 export { createApplyWorkspaceEditHandler } from './applyWorkspaceEdit'
 export {
     docModules,

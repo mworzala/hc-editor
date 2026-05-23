@@ -4,8 +4,8 @@ import type { Diagnostic } from 'vscode-languageserver-types'
 
 import { cn, ScrollArea } from '@hollowcube/design-system'
 
-import { useLuauLsp } from '../../lsp'
 import { pathFromFileUri } from '../../lsp/uriResolver'
+import { useLuauLsp } from '../../model'
 import { useProjectActions } from '../actions'
 import { TEXT_EDITOR_KIND } from '../editors/text'
 import { type ToolDefinition } from '../registry'

@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 
-import { fileUriFromPath, useLuauLsp } from '../lsp'
-import { useProject } from '../model'
+import { fileUriFromPath } from '../lsp'
+import { useLuauLsp, useProject } from '../model'
 import { effect } from '../model/foundation/signal'
 
 // Translates TextModel lifecycle into LSP traffic for Luau buffers.

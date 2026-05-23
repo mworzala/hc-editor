@@ -10,7 +10,7 @@ import {
     PopoverTrigger,
 } from '@hollowcube/design-system'
 
-import { type ConnectionStatus, useProjectConnection } from './events'
+import { type ConnectionStatus, useProjectConnection } from '../../model'
 
 // Small status dot in the project top bar. Click → popover with live details
 // (status, last event id, relative "last event N seconds ago", error message,
@@ -65,7 +65,7 @@ export function ConnectionIndicator({ desktop }: ConnectionIndicatorProps) {
                 </PopoverHeader>
                 <div className='flex flex-col gap-2 text-xs'>
                     <Row label='Last event id' value={lastEventId ?? '—'} mono />
-                    <Row label='Last event' value={<RelativeTime at={lastEventAt} />} />
+                    <Row label='Last event' value={<RelativeTime at={lastEventAt ?? undefined} />} />
                     {error ? <ErrorRow error={error} /> : null}
                 </div>
                 {status === 'error' ? (

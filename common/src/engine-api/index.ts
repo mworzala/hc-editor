@@ -4,7 +4,6 @@ export {
     type EngineApiDefinitionFile,
     type EngineApiDocModule,
 } from './bundle'
-export { EngineApiProvider, useEngineApi, type EngineApiState } from './provider'
 export { findDocNode, findMember, type EngineApiMember } from './lookup'
 export {
     formatTypeSpec,

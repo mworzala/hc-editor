@@ -101,7 +101,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 
 ---
 
-### Phase 4 — Async subsystems [ ]
+### Phase 4 — Async subsystems [x]
 
 **Goal:** migrate the heavy services that own external resources (workers, SSE, indexes).
 
@@ -120,7 +120,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Search popup returns results from every registered source.
 - Project disposal cleanly terminates the worker and closes SSE (verify no console warnings on HMR or window close).
 
-**Status notes:** _not started_
+**Status notes:** Five new services landed under `common/src/model/`: `LanguageService` (static lookup wrapper over `DEFAULT_LANGUAGES`); `EngineApiService` (bundle-loading state machine `idle → loading → ready | error`, `start()` is idempotent + retry-on-error, delegates lookup/search to `findDocNode`/`findMember`); `SearchService` (pluggable source registry, `register({id,title})` returns a disposer, `sources: ReadonlySignal<readonly SearchSource[]>`); `LspService` (owns worker + `LspClient` lifecycle, per-URI diagnostics signal cache built from a single `onDiagnostics` listener, derived `errorCountByPath`, context-key derivations for `lsp.luau.{running,starting,failed}`, `start(bundle)` idempotent + `stop()` async); `ServerEventsConnection` (consolidates `<ProjectEventsProvider>` + `<LspWatchedFilesBridge>` — one SSE iterator, on each event fans out to `fileTree.refresh()`, `lsp.client.didChangeWatchedFiles(...)`, and a targeted `textModels.handleExternalChange(path, content)` when an open clean model matches — closing the Phase 3 SSE-refresh regression). `Project` constructor sequences the new services with an `effect()` watching `engineApi.bundle` to trigger `lsp.start(bundle)` exactly once. `FileTreeService.refresh()` added (re-fetches `v1MapEditorBootstrap` and re-installs the map). Consumers migrated: `LspBufferBridge.tsx`, `LspActions.tsx`, `tools/{files,structure,problems,lsp-log}.tsx`, `editors/{docs,text}.tsx`, `editors/welcome.tsx`, `search/sources/{symbols,text}.ts`, `search/SearchPopup.tsx` (tab strip now derives from `useSearchSources()`), `data/connection-indicator.tsx`, `lsp/ui/LspActions.tsx`. `LanguageEditorDeps.services` → `LanguageEditorDeps.lsp`; the luau editor binding reads `lsp.client`/`lsp.status` signals directly. Deleted: `common/src/lsp/LuauLspContext.tsx`, `common/src/engine-api/provider.tsx`, `common/src/project/data/events.tsx`, `common/src/project/LspWatchedFilesBridge.tsx`, and the React-context half of `common/src/editor/languages/registry.tsx`. `ProjectServices.lsp.luau` slot + `setLuauClient`/`subscribeLuauLsp`/`getLuauLspSnapshot` gone; only the action registry + context-keys remain (Phase 6 takes those). Verification: `bun run lint` (0 errors, 42 unrelated warnings; `lint:signals` clean), `bun run typecheck` (clean across all 5 workspaces), `bun run test` (316 pass / 0 fail across 28 files, ~36 new tests), web preview boots cleanly.
 
 ---
 

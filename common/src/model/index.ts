@@ -100,3 +100,52 @@ export {
     type TextModelServiceDeps,
     type TextModelServiceEvent,
 } from './text-models'
+
+export {
+    LanguageService,
+    useLanguageById,
+    useLanguageForMime,
+    useLanguageForPath,
+    useLanguageService,
+    useLanguages,
+} from './languages'
+
+export {
+    EngineApiService,
+    useEngineApi,
+    useEngineApiBundle,
+    useEngineApiService,
+    useEngineApiStatus,
+    type EngineApiServiceDeps,
+    type EngineApiState,
+    type EngineApiStatus,
+} from './engine-api'
+
+export {
+    SearchService,
+    useSearchService,
+    useSearchSources,
+    type SearchSource,
+} from './search'
+
+export {
+    LspService,
+    useDiagnosticPaths,
+    useDiagnosticsForUri,
+    useLsp,
+    useLspClient,
+    useLspStatus,
+    useLuauLsp,
+    type LspServiceDeps,
+    type LuauLspSnapshot,
+} from './lsp'
+
+export {
+    ServerEventsConnection,
+    useEvents,
+    useProjectConnection,
+    type ConnectionStatus,
+    type EventsStreamFactory,
+    type ProjectConnection,
+    type ServerEventsConnectionDeps,
+} from './events'

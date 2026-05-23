@@ -71,7 +71,7 @@ const EMPTY_SNAPSHOT: EditorServices = {
 
 /** Construct a Luau LSP binding for a single editor tab. */
 export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEditorBinding {
-    const { services, uri, knownPaths, openEditor, showUsages, getEngineApiDoc } = deps
+    const { lsp, uri, knownPaths, openEditor, showUsages, getEngineApiDoc } = deps
 
     let snapshot: EditorServices = EMPTY_SNAPSHOT
     const listeners = new Set<() => void>()
@@ -145,7 +145,8 @@ export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEdito
     const resolveTargetUri = (targetUri: string) => resolveUri(targetUri, knownPaths)
 
     function rebuildSnapshot(): void {
-        const { client, status } = services.getLuauLspSnapshot()
+        const client = lsp.client.peek()
+        const status = lsp.status.peek()
         if (!client) {
             snapshot = EMPTY_SNAPSHOT
             cachedExtensions = null
@@ -195,7 +196,7 @@ export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEdito
     let currentDiagnosticsClient: object | null = null
 
     function attachDiagnosticsForCurrentClient(): void {
-        const { client } = services.getLuauLspSnapshot()
+        const client = lsp.client.peek()
         if (currentDiagnosticsClient === (client as unknown as object)) return
         if (diagnosticsUnsub) {
             diagnosticsUnsub()
@@ -212,7 +213,7 @@ export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEdito
         // also handles the small race between `rebuildSnapshot()` and this
         // subscribe call — the replayed callback just re-emits the same data.
         diagnosticsUnsub = client.onDiagnostics(
-            (u) => {
+            (u: string) => {
                 if (u !== uri) return
                 rebuildSnapshot()
                 notify()
@@ -225,11 +226,22 @@ export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEdito
         if (lspUnsub) return // already attached
         rebuildSnapshot()
         attachDiagnosticsForCurrentClient()
-        lspUnsub = services.subscribeLuauLsp(() => {
+        // Re-attach when the LSP client identity or status changes.
+        // Subscribing to both signals covers (a) start/stop transitions
+        // and (b) post-start status flips (starting → running → failed).
+        const unsubClient = lsp.client.subscribe(() => {
             attachDiagnosticsForCurrentClient()
             rebuildSnapshot()
             notify()
         })
+        const unsubStatus = lsp.status.subscribe(() => {
+            rebuildSnapshot()
+            notify()
+        })
+        lspUnsub = () => {
+            unsubClient()
+            unsubStatus()
+        }
     }
 
     function detachAll(): void {

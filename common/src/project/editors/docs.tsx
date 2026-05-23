@@ -6,12 +6,12 @@ import {
     memberSignature,
     methodSignature,
     propertySignature,
-    useEngineApi,
     type EngineApiDoc,
     type EngineApiExport,
     type EngineApiMember,
     type EngineApiModule,
 } from '../../engine-api'
+import { useEngineApi } from '../../model'
 import { type EditorDefinition } from '../registry'
 import { DOCS_EDITOR_KIND } from './docs-kind'
 

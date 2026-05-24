@@ -335,6 +335,12 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         return ''
     }, [fileFetch])
 
+    // Open the model when bytes are ready (existing files) or immediately
+    // (pending / untitled). Lifetime is layout-driven: `Project` runs a GC
+    // pass that drops models whose docId is no longer referenced by any
+    // open `editor:text` tab. The component never closes on unmount —
+    // otherwise switching tabs would destroy the model and lose any
+    // unsaved edits before they autosave.
     const openedRef = useRef(false)
     useEffect(() => {
         if (openedRef.current) return
@@ -342,14 +348,6 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         textModels.getOrOpen(docId, initialContent)
         openedRef.current = true
     }, [docId, textModels, isExistingFile, fileFetch.kind, initialContent])
-
-    useEffect(() => {
-        return () => {
-            if (openedRef.current) textModels.close(docId)
-            openedRef.current = false
-        }
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [docId])
 
     // Subscribe to the model's content for rendering. `useSignal` bridges
     // the model's `content` ReadonlySignal into React state.

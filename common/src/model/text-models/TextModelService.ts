@@ -246,6 +246,18 @@ export class TextModelService {
         model.setPath(newPath)
     }
 
+    /** Drop every model whose id is not in `liveDocIds`, regardless of
+     *  refcount. Used by `Project`'s layout-driven GC to release models
+     *  that are no longer referenced by any open editor tab. Caller is
+     *  responsible for prompting the user on dirty closes — this method
+     *  bypasses all such checks (matches `close()`'s behavior at
+     *  refcount === 0). */
+    pruneToIds(liveDocIds: ReadonlySet<DocumentId>): void {
+        for (const id of this._modelIds.peek()) {
+            if (!liveDocIds.has(id)) this._removeModel(id)
+        }
+    }
+
     /** Conflict resolution: keep the local buffer. Clears the conflict
      *  marker; `original` is left where it was so subsequent saves still
      *  diverge. */

@@ -68,7 +68,11 @@ export function buildTabRegistry(
     const registry: TabRegistry = {}
     for (const tool of tools) {
         registry[tool.kind] = {
-            render: (tab) => <PaneTabWrapper tab={tab}>{tool.render(tab)}</PaneTabWrapper>,
+            render: (tab) => (
+                <PaneTabWrapper key={tab.id} tab={tab}>
+                    {tool.render(tab)}
+                </PaneTabWrapper>
+            ),
             icon: () => tool.icon,
         }
     }
@@ -76,9 +80,17 @@ export function buildTabRegistry(
         const parse = editor.parsePayload
         const iconFor = editor.iconFor
         registry[editor.kind] = {
+            // `key={tab.id}` forces React to mount a fresh subtree per tab.
+            // Without it, switching between two `editor:text` tabs reuses the
+            // same TextTab instance and the stale `fileFetch` state seeds the
+            // new file's model with the previous file's bytes.
             render: (tab) => {
                 const payload = parse ? parse(tab.payload) : tab.payload
-                return <PaneTabWrapper tab={tab}>{editor.render({ tab, payload })}</PaneTabWrapper>
+                return (
+                    <PaneTabWrapper key={tab.id} tab={tab}>
+                        {editor.render({ tab, payload })}
+                    </PaneTabWrapper>
+                )
             },
             icon: iconFor
                 ? (tab) => {

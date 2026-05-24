@@ -12,7 +12,7 @@ import type { HCClient } from '@hollowcube/api'
 import { jsonLanguage } from '../editor/languages/json'
 import { luauLanguage } from '../editor/languages/luau'
 import type { Platform } from '../platform'
-import type { Tab, WorkspaceState } from '../workspace/types'
+import type { EditorGroupNode, Tab, WorkspaceState } from '../workspace/types'
 import { ActionRegistry } from './actions/ActionRegistry'
 import { ActiveEditorRegistry } from './active-editor/ActiveEditorRegistry'
 import { ProjectBootstrap } from './bootstrap/ProjectBootstrap'
@@ -72,6 +72,7 @@ export class Project {
     readonly lsp: LspService
     readonly events: ServerEventsConnection
     private readonly _stopLspBundleEffect: () => void
+    private readonly _stopTextModelGC: () => void
 
     constructor(deps: ProjectDeps) {
         this.projectId = deps.projectId
@@ -159,6 +160,11 @@ export class Project {
             lsp: this.lsp,
         })
 
+        // Text-model lifetime is layout-driven: the editor component never
+        // closes the model on unmount, so this effect drops models that
+        // are no longer referenced by any open `editor:text` tab.
+        this._stopTextModelGC = this._installTextModelGC()
+
         // Kick off the bootstrap fetch.
         this.bootstrap.start()
     }
@@ -166,6 +172,7 @@ export class Project {
     dispose(): void {
         // Reverse construction order. Stop incoming traffic first.
         this.events.dispose()
+        this._stopTextModelGC()
         this._stopLspBundleEffect()
         this.lsp.dispose()
         this.textModels.dispose()
@@ -231,4 +238,53 @@ export class Project {
             })
         }
     }
+
+    private _installTextModelGC(): () => void {
+        const { layout, pendingFiles, textModels } = this
+        return effect(() => {
+            const state = layout.state.value
+            const pendingMap = pendingFiles.entries.value
+            const live = new Set<string>()
+            const visitTab = (tab: Tab): void => {
+                if (tab.kind !== 'editor:text') return
+                const docId = deriveTextDocIdFromTab(tab, pendingMap)
+                if (docId) live.add(docId)
+            }
+            for (const dock of ['left', 'right', 'bottom'] as const) {
+                for (const tab of state[dock].tabs) visitTab(tab)
+            }
+            walkLeavesIn(state.center, (leaf) => {
+                for (const tab of leaf.tabs) visitTab(tab)
+            })
+            textModels.pruneToIds(live)
+        })
+    }
+}
+
+function walkLeavesIn(
+    node: EditorGroupNode,
+    visit: (leaf: Extract<EditorGroupNode, { kind: 'leaf' }>) => void,
+): void {
+    if (node.kind === 'leaf') {
+        visit(node)
+        return
+    }
+    walkLeavesIn(node.children[0], visit)
+    walkLeavesIn(node.children[1], visit)
+}
+
+function deriveTextDocIdFromTab(
+    tab: Tab,
+    pendingMap: ReadonlyMap<string, { path: string | null }>,
+): string | null {
+    const payload = tab.payload as { path?: unknown; tempId?: unknown } | null | undefined
+    const path = typeof payload?.path === 'string' ? payload.path : null
+    const tempId = typeof payload?.tempId === 'string' ? payload.tempId : null
+    if (path) return path
+    if (tempId) {
+        const pending = pendingMap.get(tempId)
+        if (pending?.path) return pending.path
+        return `unsaved:${tempId}`
+    }
+    return `unsaved:${tab.id}`
 }

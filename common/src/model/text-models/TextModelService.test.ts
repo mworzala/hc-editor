@@ -331,3 +331,40 @@ describe('TextModelService — disposal', () => {
         expect(svc.anyDirty.peek()).toBe(false)
     })
 })
+
+describe('TextModelService — pruneToIds (layout-driven GC)', () => {
+    test('drops models whose id is not in the live set', () => {
+        svc.getOrOpen('a.luau', 'x')
+        svc.getOrOpen('b.luau', 'y')
+        svc.getOrOpen('c.luau', 'z')
+        svc.pruneToIds(new Set(['b.luau']))
+        expect(svc.get('a.luau')).toBeUndefined()
+        expect(svc.get('b.luau')).toBeDefined()
+        expect(svc.get('c.luau')).toBeUndefined()
+        expect(svc.openModels.peek().map((m) => m.id)).toEqual(['b.luau'])
+    })
+
+    test('drops models regardless of refcount', () => {
+        svc.getOrOpen('a.luau', 'x')
+        svc.getOrOpen('a.luau', 'IGNORED')
+        svc.getOrOpen('a.luau', 'IGNORED')
+        svc.pruneToIds(new Set())
+        expect(svc.get('a.luau')).toBeUndefined()
+    })
+
+    test('empty live set drops everything', () => {
+        svc.getOrOpen('a.luau', 'x')
+        svc.getOrOpen('b.luau', 'y')
+        svc.pruneToIds(new Set())
+        expect(svc.openModels.peek()).toEqual([])
+    })
+
+    test('preserves dirty models that are still live', () => {
+        const a = svc.getOrOpen('a.luau', 'x')
+        a.setContent('xy')
+        expect(a.dirty.peek()).toBe(true)
+        svc.pruneToIds(new Set(['a.luau']))
+        expect(svc.get('a.luau')).toBeDefined()
+        expect(svc.get('a.luau')?.dirty.peek()).toBe(true)
+    })
+})

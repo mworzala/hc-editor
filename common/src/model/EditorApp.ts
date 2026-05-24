@@ -1,9 +1,9 @@
 // `EditorApp` — the process-wide root container.
 //
-// Owns `platform`, `auth` (Phase 5: `AuthService`), and the currently-
-// open `Project`. The wired `HCClient` lives inside `AuthService`; the
-// `client` getter returns `this.auth.client` so existing consumers
-// (`Project` deps, model services) keep working unchanged.
+// Owns `platform`, `auth` (the model-layer `AuthService`), and the
+// currently-open `Project`. The wired `HCClient` lives inside `AuthService`;
+// the `client` getter returns `this.auth.client` so consumers (`Project`
+// deps, model services) reach the same authenticated client instance.
 
 import type { HCClient } from '@hollowcube/api'
 

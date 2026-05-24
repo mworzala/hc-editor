@@ -3,11 +3,9 @@
 // Construction order is dependency order; `dispose()` runs in reverse so
 // downstream services can still reach their deps while shutting down.
 //
-//   • Phase 1 — `context: ContextService`, `actions: ActionRegistry`
-//   • Phase 2 — `layout: WorkspaceLayoutService`
-//   • Phase 3 — `activeEditor`, `pendingFiles`, `fileTree`, `bootstrap`,
-//               `textModels`
-//   • Phase 4 — `search`, `languages`, `engineApi`, `lsp`, `events`
+// Foundations (`context`, `actions`) come first; layout, file/text data
+// services, and async subsystems (search, LSP, SSE events) follow as
+// later services depend on earlier ones.
 
 import type { HCClient } from '@hollowcube/api'
 
@@ -32,9 +30,10 @@ import { findLeaf } from './workspace/tree-helpers'
 import { WorkspaceLayoutService } from './workspace/WorkspaceLayoutService'
 
 // Tool kinds known to the host. Mirrored here so `Project` can pre-declare
-// the `tool.<kind>` context-key derivations. Adding a new tool today
-// requires a one-line change here too; Phase 7 may switch this to a
-// dynamic registration if it earns its keep.
+// the `tool.<kind>` context-key derivations. Adding a new tool requires a
+// one-line change here too; if more tools land, switching to a dynamic
+// registration (e.g. host hands a tool list to `Project` at construction)
+// is a small refactor.
 const KNOWN_TOOL_KINDS = ['tool:files', 'tool:structure', 'tool:problems', 'tool:lsp-log'] as const
 
 function toolKindContextKey(kind: string): string {

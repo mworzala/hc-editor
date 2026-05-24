@@ -19,11 +19,6 @@ import { AppErrorBoundary } from './project'
 type AppRootProps = {
     platform: Platform
     children: ReactNode
-    /** Compat-only — historically gated the React Query devtools toggle,
-     *  which has been removed. Phase 3 of the architecture migration
-     *  dropped TanStack Query in favor of services that own their own
-     *  fetching. Accepted but unused so older shell call sites compile. */
-    devTools?: boolean
 }
 
 export function AppRoot({ platform, children }: AppRootProps) {

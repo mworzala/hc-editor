@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, test } from 'bun:test'
 import { createMemoryStorage, type Storage } from '../../platform'
 import { STORAGE_VERSION } from '../../workspace/migrations'
 import type { EditorGroupNode, Tab, WorkspaceState } from '../../workspace/types'
-import { findLeaf, selectActiveContextTags } from './tree-helpers'
+import { findLeaf } from './tree-helpers'
 import { WorkspaceLayoutService } from './WorkspaceLayoutService'
 
 const STORAGE_KEY = 'test:workspace'
@@ -309,42 +309,6 @@ describe('WorkspaceLayoutService — corrupt persisted state recovery', () => {
         const second = makeService({ storage })
         expect(second.columnSizes.peek()).toEqual([5, 90, 5])
         expect(storage.get(STORAGE_KEY)).not.toBeNull()
-    })
-})
-
-describe('selectActiveContextTags', () => {
-    test('always includes "global"', () => {
-        const initial = makeInitial()
-        const tags = selectActiveContextTags(initial)
-        expect(tags.has('global')).toBe(true)
-    })
-
-    test('adds tool:<kind> for each distinct mounted tool tab', () => {
-        const initial = makeInitial()
-        initial.left.tabs.push(tab('t1', 'tool:files'))
-        initial.right.tabs.push(tab('t2', 'tool:terminal'))
-        initial.bottom.tabs.push(tab('t3', 'tool:files'))
-
-        const tags = selectActiveContextTags(initial)
-        expect(tags.has('tool:files')).toBe(true)
-        expect(tags.has('tool:terminal')).toBe(true)
-    })
-
-    test('adds editor:<kind> for the active tab in the focused leaf', () => {
-        const initial = makeInitial('leaf-A')
-        initial.center = leaf('leaf-A', [tab('t1', 'editor:text')], 't1')
-
-        const tags = selectActiveContextTags(initial)
-        expect(tags.has('editor:text')).toBe(true)
-    })
-
-    test('does not add editor:<kind> when the focused tab is a tool', () => {
-        const initial = makeInitial('leaf-A')
-        initial.center = leaf('leaf-A', [tab('t1', 'tool:files')], 't1')
-
-        const tags = selectActiveContextTags(initial)
-        expect(tags.has('tool:files')).toBe(false)
-        expect(tags.has('editor:tool:files')).toBe(false)
     })
 })
 

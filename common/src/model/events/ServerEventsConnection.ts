@@ -1,12 +1,9 @@
 // `ServerEventsConnection` — owns the SSE iterator over the project
-// events stream + the connection status signals. Consolidates the
-// pre-Phase-4 `<ProjectEventsProvider>` AND `<LspWatchedFilesBridge>`
-// into one model-layer service.
+// events stream + the connection status signals.
 //
 // On each event:
 //   1. `fileTree.refresh()` — re-fetch the bootstrap and re-install the
-//      file map. Closes the Phase 3 regression where external file
-//      changes no longer updated the tree.
+//      file map so external file changes show up in the tree.
 //   2. `lsp.client.peek()?.didChangeWatchedFiles([{ uri, type: 2 }])` —
 //      forward to the LSP so it re-analyses the file.
 //   3. If a clean `TextModel` matches the path, fetch the bytes and
@@ -16,7 +13,7 @@
 //
 // Reconnect policy: exponential backoff with jitter, `Last-Event-ID`
 // resume, `ApiError` stops the stream (manual retry via `retry()`),
-// `AbortError` exits cleanly. Mirrors today's events.tsx.
+// `AbortError` exits cleanly.
 
 import {
     ApiError,

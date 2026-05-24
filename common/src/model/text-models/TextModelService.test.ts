@@ -317,8 +317,7 @@ describe('TextModelService — external changes', () => {
         expect(svc.conflicts.peek().has('a.luau')).toBe(false)
         // External change was rejected (dirty), but acceptExternal calls
         // discard() — which reverts content to the model's original (the
-        // original buffer 'old' since the conflict path skipped
-        // setOriginal). The full SSE→accept flow lands in Phase 4.
+        // original buffer 'old' since the conflict path skipped setOriginal).
         expect(m.content.peek()).toBe(m.original.peek())
     })
 })

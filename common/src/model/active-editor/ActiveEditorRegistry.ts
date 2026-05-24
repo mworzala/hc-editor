@@ -1,6 +1,5 @@
 // `ActiveEditorRegistry` — the model-layer home for "which text editor is
-// currently mounted, where, with what view-level handlers." Replaces the
-// module-level `Map` in `common/src/editor/active-editor-registry.ts`.
+// currently mounted, where, with what view-level handlers."
 //
 // Two surfaces:
 //
@@ -8,9 +7,9 @@
 //     language) — looked up by `editor.save` / `editor.format` /
 //     `editor.codeAction` etc.
 //   • An `activeDocId: ReadonlySignal<string | null>` — the focused tab
-//     id. Set imperatively by the React focus tracker (the workspace
-//     primitive doesn't push it here yet; Phase 6 will). For now an
-//     external caller is free to set it via `setActive(tabId)`.
+//     id. `<EditorFocusBridge>` pushes the focused leaf's `activeId` here
+//     whenever layout focus changes; action handlers read it via `.peek()`
+//     to resolve the focused entry.
 
 import type { EditorView } from '@codemirror/view'
 
@@ -33,9 +32,9 @@ export class ActiveEditorRegistry {
     private readonly _registry = new Map<string, ActiveEditorEntry>()
     private readonly _activeDocId = signal<string | null>(null)
 
-    /** The currently focused tab id, if known. Phase 6 wires this from the
-     *  workspace's focus signal; for now consumers can `setActiveDocId`
-     *  imperatively. */
+    /** The currently focused tab id, if known. `<EditorFocusBridge>` pushes
+     *  this on layout focus changes; tests and other callers can use
+     *  `setActiveDocId` imperatively. */
     readonly activeDocId: ReadonlySignal<string | null> = this._activeDocId
 
     register(tabId: string, entry: ActiveEditorEntry): void {

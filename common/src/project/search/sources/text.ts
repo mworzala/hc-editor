@@ -12,11 +12,10 @@ type TextResult = Extract<SearchResult, { kind: 'text' }>
 
 // Client-side cross-file text search.
 //
-// Phase 3 dropped TanStack Query, so the per-file content cache is gone too.
-// In practice text-search rarely repeats the exact same query, and editor
-// tabs hold their own bytes via `TextModelService` now; the cost of a re-grep
-// is the same wire-time the cached version had. If repeat-query performance
-// becomes a concern we can layer a tiny in-memory cache here.
+// No per-file content cache: in practice text-search rarely repeats the
+// exact same query, and editor tabs hold their own bytes via
+// `TextModelService`. If repeat-query performance becomes a concern we
+// can layer a tiny in-memory cache here.
 
 const CONCURRENCY = 6
 const PER_FILE_LIMIT = 20

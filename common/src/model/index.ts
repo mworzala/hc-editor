@@ -38,7 +38,6 @@ export {
     findLeaf,
     makeId,
     resolveTargetLeaf,
-    selectActiveContextTags,
     selectTabLocations,
     useActiveDrag,
     useCenter,

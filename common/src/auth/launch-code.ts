@@ -20,8 +20,8 @@ import type { LaunchCodeSource } from '../platform'
 // guaranteed to still see it. Stripping it immediately also makes the grant
 // single-use: a reload or StrictMode remount cannot replay it.
 //
-// Desktop uses hash routing and gets NO hash source in Phase 1 (handoff is
-// Phase 2 — a Wails deep-link event will provide the code instead).
+// Desktop uses hash routing and has no source today; the Wails deep-link
+// handoff that will eventually provide the code is unbuilt.
 const MARKER = '§k='
 
 function captureLaunchCode(): string | null {

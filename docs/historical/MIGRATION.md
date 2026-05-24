@@ -1,8 +1,10 @@
 # Migration plan: React-context-heavy → services + signals + actions
 
-> **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` complete · `[skip]` deliberately deferred
+> **Status:** completed 2026-05-23. Preserved as a historical record of the
+> seven-phase migration. The current architecture is documented in
+> [`docs/model-architecture.md`](../model-architecture.md).
 >
-> **For future agents:** update the status checkbox and the "Status notes" line under each phase as work lands. When a phase completes, write a one-line summary of what shipped (e.g. "FileTreeService + TextModelService + ProjectBootstrap landed in #42; TanStack Query removed"). Do not delete completed phases — they are the record. If a phase's scope changes meaningfully, edit its description in place rather than starting over.
+> **Status legend:** `[ ]` not started · `[~]` in progress · `[x]` complete · `[skip]` deliberately deferred
 
 ## Context
 
@@ -167,7 +169,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 
 ---
 
-### Phase 7 — Cleanup [ ]
+### Phase 7 — Cleanup [x]
 
 **Goal:** delete the rubble, update docs, drop unused deps.
 
@@ -181,7 +183,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Final lint, typecheck, full test pass. Update `bun.lock`.
 - Delete this MIGRATION.md or move it to `docs/historical/` as a record.
 
-**Status notes:** _not started_
+**Status notes:** Most "delete dead context" bullets had already been satisfied by Phases 2–6 (the deleted Phase 7 targets — `WorkspaceContext`, `RegistryProvider`, `ProjectGate`, `<HCClientProvider>`, the various provider components — were either deleted as soon as their replacement landed in an earlier phase, or are legitimate post-migration scaffolding that survived intentionally). What Phase 7 actually shipped: (1) **prose updates** — `CLAUDE.md` "Target model architecture" → "Model architecture", dropped TanStack Query / Zustand store mentions, replaced the routes table (`/playground`, `/editor`, `/ds` rows removed), struck the dev-tooling section, repointed the MIGRATION.md link to `docs/historical/`, and refreshed the `@hollowcube/common` layout listing to include `model/` and drop `demo/`; `docs/model-architecture.md` status header reframed ("target architecture" → "current architecture as of Phase 7"), the seven-phase migration plan body replaced with a one-paragraph pointer to this historical doc, the canonical TextModelService example aligned with the dotted-form context keys (`editor.text`, `editor.dirty`, `editor.anyDirty`) and the Phase 6 reality that editor-state derivations live centrally in `Project.ts`. (2) **demo + zustand removal** — deleted `common/src/demo/` (3 files) and the six page re-exports (`web/src/pages/{playground,editor,ds}.tsx` + desktop counterparts); removed `./demo` subpath export from `common/package.json`; removed `zustand` from the dependency lists in `common/`, `web/`, and `desktop/frontend/` package.json files; `bun install --force` confirmed the lockfile drops zustand entirely (0 entries from 2). (3) **stale Phase-X comment strip** — 13 source files cleaned (`launch-code.ts`, `ActiveEditorRegistry.ts`, `tree-helpers.ts` — the orphaned `selectActiveContextTags` helper + its tests + barrel re-exports deleted, `TextModelService.ts` + its test, `Project.ts`, `EditorApp.ts`, `app-root.tsx` — dropped the dead `devTools?: boolean` prop and its two call sites in `web/desktop/main.tsx`, `api-test.tsx`, `text.ts` search source, `persistence.ts`, `ServerEventsConnection.ts`, `FileTreeService.ts`, `registry.tsx`, `web/src/main.tsx`, `desktop/frontend/src/launcher/useProjects.ts`). Final grep `Phase [1-7]` against `common/src` + `web/src` + `desktop/frontend/src` returns zero matches. (4) **MIGRATION.md relocation** — moved to `docs/historical/MIGRATION.md` via `git mv` (history preserved). Verification: `bun install --force` clean, `bun run lint` clean (0 errors, 45 unrelated warnings; `lint:signals` clean), `bun run typecheck` clean across all 5 workspaces, `bun run test` green (300+ tests), web preview boots cleanly (already running). The seven-phase migration is closed.
 
 ---
 

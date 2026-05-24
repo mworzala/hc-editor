@@ -1,10 +1,9 @@
 import { type LanguageDefinition } from './types'
 
-// React-context-based language registry was removed in Phase 4 of the
-// model migration. The canonical home is now `LanguageService` in
-// `common/src/model/languages/`. The pure-TS lookup helpers stay here
-// because the editor language modules (luau-editor-services etc.) and
-// tests reference them directly without going through the model layer.
+// The canonical language registry is `LanguageService` in
+// `common/src/model/languages/`. The pure-TS lookup helpers below stay
+// here because the editor language modules (luau-editor-services etc.)
+// and tests reference them directly without going through the model layer.
 
 /** Plain (React-free) language lookup by mime type. First match wins.
  *  Supports `<type>/*` wildcard patterns in `LanguageDefinition.mimeTypes`. */

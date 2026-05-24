@@ -2,10 +2,10 @@ import { type EditorDefinition } from '../registry'
 
 export const API_TEST_EDITOR_KIND = 'editor:api-test'
 
-// The original API test demo lived on top of React Query hooks; Phase 3
-// of the model migration dropped the React Query layer, and the demo
-// went with it. The editor kind stays so the Welcome page's "Open API
-// test" button keeps working — it now opens a small explainer pane.
+// The original API test demo lived on top of React Query hooks; the
+// model layer's services took over fetching and the demo went with it.
+// The editor kind stays so the Welcome page's "Open API test" button
+// keeps working — it now opens a small explainer pane.
 
 export const apiTestEditor: EditorDefinition = {
     kind: API_TEST_EDITOR_KIND,

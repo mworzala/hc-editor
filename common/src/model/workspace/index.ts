@@ -7,7 +7,6 @@ export {
     pruneEmptyLeaves,
     rebindFocusIfMissing,
     resolveTargetLeaf,
-    selectActiveContextTags,
     selectTabLocations,
     splitLeafInTree,
     updateDockOrLeaf,

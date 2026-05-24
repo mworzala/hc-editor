@@ -52,7 +52,7 @@ const platform = {
 }
 
 createRoot(document.getElementById('root')!).render(
-    <AppRoot platform={platform} devTools={import.meta.env.DEV}>
+    <AppRoot platform={platform}>
         <RouterProvider router={router} />
     </AppRoot>,
 )

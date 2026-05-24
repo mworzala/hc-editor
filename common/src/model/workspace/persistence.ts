@@ -1,10 +1,10 @@
 // Persistence helpers for `WorkspaceLayoutService`.
 //
 // The schema-versioned migration + structural validation paths are
-// re-used verbatim from `common/src/workspace/{migrations,validate}.ts` so
-// stored layouts written by the old Zustand-backed store continue to load
-// after this migration. Don't redesign persistence in this phase —
-// `MIGRATION.md` Phase 2 scope explicitly says verbatim.
+// re-used from `common/src/workspace/{migrations,validate}.ts` so stored
+// layouts continue to load across schema changes. When the schema shape
+// changes, bump `STORAGE_VERSION` and add a migration entry — don't
+// redesign the persistence loop.
 //
 // The "fail to default" path is load-bearing: a parse throw, a missing
 // intermediate migration, or a structurally invalid blob would otherwise

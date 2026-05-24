@@ -66,31 +66,6 @@ function walkLeaves(
     walkLeaves(node.children[1], visit)
 }
 
-/** Active "context tags" derived from workspace state, consumed today by
- *  the old action registry. Phase 6 wires this into `ContextService`
- *  derivations. */
-export function selectActiveContextTags(state: WorkspaceState): Set<string> {
-    const tags = new Set<string>()
-    tags.add('global')
-
-    for (const dock of ['left', 'right', 'bottom'] as const) {
-        for (const tab of state[dock].tabs) {
-            if (tab.kind.startsWith('tool:')) tags.add(tab.kind)
-        }
-    }
-
-    if (state.focusedLeafId) {
-        const leaf = findLeaf(state.center, state.focusedLeafId)
-        if (leaf && leaf.activeId) {
-            const active = leaf.tabs.find((t) => t.id === leaf.activeId)
-            if (active && !active.kind.startsWith('tool:')) {
-                tags.add(active.kind)
-            }
-        }
-    }
-    return tags
-}
-
 // ---------- mutation helpers ----------
 
 export function updateDockOrLeaf(

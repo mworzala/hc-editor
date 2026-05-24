@@ -1,6 +1,5 @@
 // `TextModelService` — owns the in-memory text models for every open
-// editor tab. Replaces the Zustand document store + the autosave React
-// effect that used to live in `editors/text.tsx`.
+// editor tab.
 //
 // Document ids:
 //   • File with a known path → `docId = path`
@@ -16,7 +15,8 @@
 // (which surfaces a save-as prompt elsewhere).
 //
 // SSE-driven external-change handlers (`handleExternalChange`, etc.) are
-// wired in Phase 4 when `ServerEventsConnection` lands.
+// invoked by `ServerEventsConnection` when the server reports a change to
+// a file we have open.
 
 import {
     v1MapFilesUpdate,
@@ -120,7 +120,8 @@ export class TextModelService {
     readonly anyDirty: ReadonlySignal<boolean> = computed(() => this.dirtyModels.value.length > 0)
 
     /** Set of paths where the local buffer diverges from the server's
-     *  latest content (SSE-driven). Phase 4 populates it. */
+     *  latest content (SSE-driven; `ServerEventsConnection` populates it
+     *  via `handleExternalChange`). */
     readonly conflicts: ReadonlySignal<ReadonlySet<string>> = this._conflicts
 
     readonly events: Event<TextModelServiceEvent> = this._events.event
@@ -211,10 +212,11 @@ export class TextModelService {
         return results
     }
 
-    /** External-change handler — paste in new content from SSE. Phase 4
-     *  wires this; here for the API surface. If the local buffer is
-     *  clean, just update both original + content. If dirty, mark a
-     *  conflict and leave the local edit. */
+    /** External-change handler — paste in new content from SSE.
+     *  `ServerEventsConnection` calls this when the server reports a
+     *  change to a path we have open. If the local buffer is clean,
+     *  update both original + content. If dirty, mark a conflict and
+     *  leave the local edit. */
     handleExternalChange(path: string, newContent: string): void {
         const model = this._modelsInternal.get(path)
         if (!model) return
@@ -252,8 +254,9 @@ export class TextModelService {
     }
 
     /** Conflict resolution: drop the local buffer, accept the server's
-     *  latest. Phase 4 wires this; today there's no server content to
-     *  read from. */
+     *  latest. `ServerEventsConnection` wires fresh content into this
+     *  service via `handleExternalChange`; this resolver is the explicit
+     *  user choice to discard local edits after a conflict is flagged. */
     acceptExternal(path: string): void {
         const model = this._modelsInternal.get(path)
         if (!model) return

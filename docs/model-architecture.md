@@ -1,8 +1,8 @@
 # Model architecture
 
-> **Status:** target architecture, not the current state of the code. The current
-> codebase is React-context-heavy with a deeply nested provider tower.
-> This document describes where we are going.
+> **Status:** current architecture. The seven-phase migration that produced
+> this design is preserved at [`docs/historical/MIGRATION.md`](historical/MIGRATION.md);
+> this doc describes the realized state.
 
 ## TL;DR
 
@@ -116,7 +116,7 @@ Every UI interaction is an action. Actions have:
 
 - `id` — `'editor.save'`, `'files.create'`, `'workspace.toggleLeftDock'`
 - `title` — human-readable
-- `when?` — a context-key expression like `'editorFocused && editorDirty'`
+- `when?` — a context-key expression like `'editor.text && editor.dirty'`
 - `keybinding?` — `'$mod+s'`
 - `menu?` — placement metadata
 - `run(args?)` — the handler
@@ -391,7 +391,7 @@ export type Action = {
     id: string                              // unique, dotted: 'editor.save'
     title: string                           // human-readable
     keybinding?: string                     // '$mod+s', '$mod+shift+p'
-    when?: string                           // 'editorFocused && editorDirty'
+    when?: string                           // 'editor.text && editor.dirty'
     menu?: { path: MenuPath; group: string; order: number }
     run(args?: Record<string, unknown>): void | Promise<void>
 }
@@ -419,7 +419,7 @@ export class ContextService {
     derive(key: string, fn: () => unknown): () => void
 
     /** Set a context key imperatively. Use for view-state-driven keys like
-     *  `editorFocused` that aren't naturally derived from model signals. */
+     *  `editor.focused` that aren't naturally derived from model signals. */
     set(key: string, value: unknown): void
 
     get(key: string): unknown
@@ -675,7 +675,7 @@ private _registerActions(): void {
         id: 'editor.save',
         title: 'Save',
         keybinding: '$mod+s',
-        when: 'editorFocused && editorDirty',
+        when: 'editor.text && editor.dirty',
         run: async () => {
             const docId = this.deps.activeEditor.activeDocId.peek()
             if (!docId) return
@@ -690,14 +690,14 @@ private _registerActions(): void {
         id: 'editor.saveAll',
         title: 'Save All',
         keybinding: '$mod+alt+s',
-        when: 'anyDirty',
+        when: 'editor.anyDirty',
         run: () => this.saveAll(),
     }))
 
     this._actionDisposers.push(reg.register({
         id: 'editor.revert',
         title: 'Revert File',
-        when: 'editorFocused && editorDirty',
+        when: 'editor.text && editor.dirty',
         run: () => {
             const docId = this.deps.activeEditor.activeDocId.peek()
             if (!docId) return
@@ -711,18 +711,18 @@ private _registerActions(): void {
 
 ### Context key derivations
 
+Editor-state derivations (`editor.focused`, `editor.text`, `editor.dirty`, `editor.anyDirty`) are owned centrally by `Project.ts` so they can read from the focus signal *and* the dirty signal in one place. Service-local context keys (e.g. `lsp.luau.running` inside `LspService`) live with the service that owns the source signal. Both are equally valid — pick whichever puts the derivation next to the data it depends on.
+
 ```ts
-private _registerContextKeys(): void {
-    this._contextDisposers.push(
-        this.deps.context.derive('editorDirty', () => {
-            const docId = this.deps.activeEditor.activeDocId.value
-            if (!docId) return false
-            return this.modelsInternal.get(docId)?.dirty.value ?? false
-        })
-    )
-    this._contextDisposers.push(
-        this.deps.context.derive('anyDirty', () => this.anyDirty.value)
-    )
+// In Project.ts
+private _installContextDerivations(): void {
+    const { context, layout, textModels, activeEditor } = this
+    context.derive('editor.dirty', () => {
+        const docId = activeEditor.activeDocId.value
+        if (!docId) return false
+        return textModels.get(docId)?.dirty.value ?? false
+    })
+    context.derive('editor.anyDirty', () => textModels.anyDirty.value)
 }
 ```
 
@@ -918,67 +918,23 @@ function makeFakeClient(opts?: { updateDelay?: number; failNextUpdate?: boolean 
 
 ---
 
-## Migration plan
+## How the codebase got here
 
-The refactor is big but breaks into independently shippable slices. Order matters — earlier phases unblock later ones.
-
-### Phase 1: Foundations
-
-1. **Conventions** — author this doc (done by reading this) and a `common/src/model/README.md` pointer.
-2. **Primitives** — `Emitter`, `useSignal` adapter, project-context provider scaffolding. Re-export `@preact/signals-core` from `common/src/model/foundation/signal.ts` so all internal usage routes through one path.
-3. **Lint substrate** — ban `react` imports from `common/src/model/**` (file-based or via an eslint custom rule). Add a check that bans `.value` in service files outside `computed`/`effect` (heuristic; not perfect).
-
-### Phase 2: Auth (smallest surface, learns the pattern)
-
-4. Extract `AuthService` from `AuthProvider` — pure class with state machine in signals. The new `<AuthProvider>` is a 30-line React bridge.
-5. Migrate auth tests. The redeem / tokens / dpop tests already exercise plain TS — they survive untouched.
-
-### Phase 3: Drop TanStack Query
-
-6. Convert endpoints from `useFoo` hooks to plain `foo(client, args)` functions. Strip every `use*` hook from `api/src/endpoints/`.
-7. Remove `@tanstack/react-query` and the dev devtools toggle. Remove `<HCClientProvider>` — the model owns the client.
-
-### Phase 4: Project container + easy services
-
-8. Define `Project` container, wire empty service instances.
-9. Lift `WorkspaceLayoutService` (already a Zustand store) into the model layer. Reshape internals as signals.
-10. Lift `DocumentsModel` → `TextModelService` per this spec. Move autosave from the React effect into the service.
-11. Lift `PendingFilesService` and `ActionRegistry` (already a class).
-12. Build `ContextService` from scratch with `derive` + `set`.
-
-### Phase 5: Async subsystems
-
-13. `LspService` (worker lifecycle, diagnostics signals, capability dispatch).
-14. `EngineApiService`.
-15. `ServerEventsConnection` (SSE), wired into siblings via injected callbacks.
-16. `SearchService` with sources registered by `FileTreeService`, `LspService`, `ActionRegistry`, `EngineApiService`.
-
-### Phase 6: React collapse
-
-17. Rewrite `ProjectWorkspace` to a 3-deep provider tree: `<ProjectErrorBoundary>` → `<TooltipProvider>` → `<ProjectProvider>` → workspace.
-18. Update page shells (web `pages/index.tsx`, desktop `pages/project/[projectId].tsx`) to construct the `Project` model in a `useEffect`, dispose on cleanup.
-19. Move all current action handlers from components into the relevant services. Components only call `actions.run(...)`.
-
-### Phase 7: Cleanup
-
-20. Delete dead React context files, old hooks, the unused providers, `<HCClientProvider>`, `react-query` dev devtools, `useV1*` endpoint hooks.
-21. Update CLAUDE.md sections that describe the old architecture.
-
-Each phase is independently testable; you can pause and ship between any two.
+The architecture landed in seven shipped phases (foundation primitives → workspace layout → project data services + TanStack Query removal → async subsystems → auth → React collapse + action consolidation → cleanup). The full record — what each phase delivered, what was deleted, verification notes — is preserved at [`docs/historical/MIGRATION.md`](historical/MIGRATION.md).
 
 ---
 
-## Risk register
+## Invariants going forward
 
-- **HMR with disposable models.** When the shell hot-reloads, the model is re-created, terminating the LSP worker and reopening SSE. Dispose must be idempotent.
-- **The action-context bridge** (focus state pushed from React into `ContextService`) is the only reverse flow. Don't let other React-pushes-into-model patterns creep in.
-- **Optimistic-update bugs.** Without TanStack Query's cache layer, mutations must patch model state explicitly after the network confirms, with rollback on error.
-- **Workers and SSE leaks.** Wrong disposal order is the bug that doesn't surface until you've opened and closed projects ten times in dev.
-- **`peek()` vs `.value` mistakes** silently capture dependencies. Get the lint rule in place early.
+- **HMR with disposable services.** When the shell hot-reloads, services re-construct, terminating the LSP worker and reopening SSE. Every `dispose()` is idempotent and runs in reverse construction order.
+- **`<EditorFocusBridge>` is the only React → model push.** Other reactivity flows model → React (via signals). Don't let other reverse flows creep in — if a new React-side concern needs to drive context, add it to that bridge or write a sibling one.
+- **Optimistic updates.** Mutations patch model state explicitly after the network confirms, with rollback on error. No cache layer behind us.
+- **Workers and SSE leaks.** Wrong disposal order is a bug that doesn't surface until you've opened and closed projects ten times in dev. The `Project.dispose()` order is load-bearing.
+- **`peek()` vs `.value` mistakes** silently capture dependencies. The `lint:signals` script catches the obvious ones; subtle cases require code review.
 
 ---
 
 ## See also
 
-- [`docs/model-architecture-textmodelservice.md`](./model-architecture-textmodelservice.md) — to be written. The full implementation-level spec extracted from this doc for handoff to whoever implements that service.
 - [`CLAUDE.md`](../CLAUDE.md) — top-level project guidance. References this doc.
+- [`docs/historical/MIGRATION.md`](historical/MIGRATION.md) — the migration record.

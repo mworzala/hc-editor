@@ -28,7 +28,6 @@ export {
     findLeaf,
     makeId,
     resolveTargetLeaf,
-    selectActiveContextTags,
     selectTabLocations,
     type TabLocation,
 } from '../model/workspace'

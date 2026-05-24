@@ -5,9 +5,10 @@
 // entries and runtime extras like inline rename rows / new-file rows that
 // don't belong on the service).
 //
-// External SSE updates feed `upsert` / `remove` in Phase 4. For Phase 3,
 // `installAll` is called once by `ProjectBootstrap` after the editor
-// bootstrap resolves.
+// bootstrap resolves; `refresh()` re-fetches from `ServerEventsConnection`
+// on each SSE event; `upsert` / `remove` are also reachable from save
+// flows and explicit deletes.
 
 import type { HCClient, MapFile } from '@hollowcube/api'
 import { v1MapEditorBootstrap, v1MapFilesDelete, v1MapFilesUpdate } from '@hollowcube/api'
@@ -41,8 +42,8 @@ export class FileTreeService {
     constructor(private readonly deps: FileTreeServiceDeps) {}
 
     /** Re-fetch the editor bootstrap and replace the file map. Used by
-     *  `ServerEventsConnection` on each SSE event to mirror the
-     *  pre-Phase-3 invalidate-and-refetch behavior. */
+     *  `ServerEventsConnection` on each SSE event so the tree reflects
+     *  external changes (renames, deletes, new files on disk). */
     async refresh(): Promise<void> {
         const data = await v1MapEditorBootstrap(this.deps.client, this.deps.projectId)
         this.installAll(data.files)
@@ -56,14 +57,14 @@ export class FileTreeService {
         this._byPath.value = next
     }
 
-    /** Insert or update one file in the map. SSE updates use this in Phase 4. */
+    /** Insert or update one file in the map. */
     upsert(file: MapFile): void {
         const next = new Map(this._byPath.peek())
         next.set(file.path, file)
         this._byPath.value = next
     }
 
-    /** Remove one file from the map. SSE deletes use this in Phase 4. */
+    /** Remove one file from the map. */
     remove(path: string): void {
         const cur = this._byPath.peek()
         if (!cur.has(path)) return

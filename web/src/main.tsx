@@ -11,7 +11,8 @@ import { resolveApiBaseUrl } from './api-base'
 import '@hollowcube/design-system/globals.css'
 
 // Browser-history routing here, so the launch-code fragment (#code=…) doesn't
-// collide with the router. Desktop omits this (hash routing + Phase 2 handoff).
+// collide with the router. Desktop omits this — it uses hash routing and
+// will eventually pick up launch codes via a Wails deep-link handoff.
 //
 // `apiBaseUrl` is resolved at runtime from the page hostname (web/src/api-base.ts),
 // not baked in at build time, so one artifact serves prod / per-PR previews /
@@ -64,7 +65,7 @@ const basename = import.meta.env.BASE_URL.replace(/\/$/u, '') || '/'
 const router = createBrowserRouter(routes, { basename })
 
 createRoot(document.getElementById('root')!).render(
-    <AppRoot platform={platform} devTools={import.meta.env.DEV}>
+    <AppRoot platform={platform}>
         <RouterProvider router={router} />
     </AppRoot>,
 )

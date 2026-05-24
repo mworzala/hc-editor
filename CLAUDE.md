@@ -6,11 +6,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A web + desktop editor for authoring Luau scripts that run on a Minecraft server's Luau-based server-side scripting engine. Users join the server and then open the web or desktop editor to work on their project. The UI is loosely modelled after JetBrains Fleet "Islands" — a workspace with tool docks on the left/bottom/right and editor panels in the center that split/nest.
 
-## Target model architecture (read first)
+## Model architecture (read first)
 
-**The codebase is migrating** from a React-context-heavy architecture (deeply nested provider tower, model state spread across providers/hooks) to a **services + signals + actions** architecture. Full design doc: [`docs/model-architecture.md`](docs/model-architecture.md). Read it before designing new model code or refactoring existing services. The current code is being moved toward this target progressively.
-
-**Migration roadmap:** [`MIGRATION.md`](MIGRATION.md) lists the seven phases of the transition with status checkboxes. Read it to know what's been migrated, what's in flight, and what's still on the old architecture. **When you complete a migration phase, update the status checkbox and the "Status notes" line under that phase.** When you complete a sub-task within a phase, leave a status note so the next session can pick up. Do not delete completed phases — the doc is also the record.
+The model layer is a **services + signals + actions** architecture. Plain TypeScript service classes own state as `@preact/signals-core` signals; user-initiated mutations route through an `ActionRegistry` command bus; reactive context keys (via `ContextService`) gate which actions are enabled at any given moment. Full design doc: [`docs/model-architecture.md`](docs/model-architecture.md). Read it before designing new model code or refactoring existing services. The migration that brought the codebase to this architecture is recorded in [`docs/historical/MIGRATION.md`](docs/historical/MIGRATION.md).
 
 The five principles in short:
 
@@ -28,9 +26,9 @@ The five principles in short:
 
 This is a Bun-managed monorepo (`bun.lock`, `workspaces` in root `package.json`) with five packages:
 
-- `@hollowcube/common` — Platform-agnostic app code. **Most of the app lives here.** Exposes several subpath exports (`./platform`, `./workspace`, `./project`, `./editor`, `./demo`, `./dev`) — see the layout section below.
+- `@hollowcube/common` — Platform-agnostic app code. **Most of the app lives here.** Exposes several subpath exports (`./platform`, `./workspace`, `./project`, `./editor`, `./model`) — see the layout section below.
 - `@hollowcube/design-system` — UI primitives. base-ui (`@base-ui/react`) under the hood, originally scaffolded from shadcn (`components.json` is kept for `shadcn add`). Tailwind v4 via `@tailwindcss/vite`. Icons via `lucide-react`.
-- `@hollowcube/api` — Custom HTTP client (`HCClient`) with Zod response validation and TanStack Query hooks under `api/src/endpoints/`. Currently not invoked by the workspace UI — see future plans.
+- `@hollowcube/api` — Custom HTTP client (`HCClient`) with Zod response validation and plain async endpoint functions under `api/src/endpoints/`. Called directly by model-layer services (e.g. `FileTreeService` calls `v1MapEditorBootstrap`, `TextModelService` calls `v1MapFilesUpdate`).
 - `@hollowcube/web` — Browser SPA shell. Vite + React 19, `@generouted/react-router` browser-history routing under `src/pages/`.
 - `@hollowcube/desktop` (at `desktop/frontend/`) — Wails 3 frontend shell. Same React/Vite/generouted stack but uses `createHashRouter` and the `@wailsio/runtime` Vite plugin pointed at `./bindings` (generated Go bindings). Sibling `desktop/main.go` is the Wails Go host.
 
@@ -40,15 +38,16 @@ This is a Bun-managed monorepo (`bun.lock`, `workspaces` in root `package.json`)
 
 ```
 common/src/
+  model/       Service classes (signals + actions). The model layer.
   platform/    Platform abstraction: { kind: 'web'|'desktop', storage }, PlatformProvider, usePlatform
-  workspace/   Workspace primitive — recursive splits, tool docks, dnd-kit, Zustand store
+  workspace/   Workspace primitive — recursive splits, tool docks, dnd-kit
   project/     ProjectWorkspace (the `/` page), top bar, tool/editor registries
   editor/      CodeMirror 6 editor component (CodeEditor) and extensions
-  demo/        Showcase pages: EditorDemo, Playground, ApiTestDemo
-  dev/         Dev-only utilities (QueryDevtoolsToggle)
+  auth/        Auth helpers (DPoP, launch-code redemption, session store)
+  lsp/         Luau LSP client + worker + UI overlay
 ```
 
-The workspace primitive (`./workspace`) is a generic layout engine. The project shell (`./project`) is the application-specific consumer that wires tools, editors, and chrome on top of it.
+`./model` is the source of truth for app state and behavior; everything else is a view layer over it. The workspace primitive (`./workspace`) is a generic layout engine; the project shell (`./project`) is the application-specific consumer that wires tools, editors, and chrome on top of it.
 
 ## Workspace UI model
 
@@ -58,20 +57,20 @@ The "workspace" screen is a 3-column / 2-row layout:
 - The middle column splits vertically: editors on top, `bottom` ToolDock below — sized by `middleSizes: [center, bottom]`
 - Center is a recursive tree of `EditorGroup` split nodes (horizontal/vertical) with leaves holding tabs; tool docks are flat tab lists
 - Tabs are polymorphic by `kind` (e.g. `'tool:files'`, `'editor:welcome'`) — the host supplies a `tabRegistry: Record<kind, render>`. The primitive doesn't know about tools vs editors; that distinction lives one layer up in `./project`.
-- State lives in a Zustand store (`workspace/store.ts`) persisted to `localStorage` via the platform's Storage impl. Versioned via `STORAGE_VERSION` (currently 2); bump and write a fresh schema when the shape changes.
+- State lives on `Project.layout` (a `WorkspaceLayoutService` in [`common/src/model/workspace/`](common/src/model/workspace/)) — signal-backed slices (`columnSizes`, `middleSizes`, `docksVisible`, `left`/`right`/`bottom`, `center`, `focusedLeafId`), persisted to `localStorage` via the platform's Storage impl with debounced writes. Versioned via `STORAGE_VERSION` (currently 2); bump and write a fresh schema when the shape changes.
 - Drag-and-drop uses `@dnd-kit`; tabs can move between docks/leaves and drop on a leaf edge to split it.
 - Resizing uses `react-resizable-panels`.
 
-**The primitive has no built-in toolbar.** Hosts compose their own top-bar above it and drive dock visibility through `state.toggleDock(dock)`. The primitive's `renderEmpty?: (dockId) => ReactNode` prop lets hosts supply a placeholder when a dock has no tabs.
+**The primitive has no built-in toolbar.** Hosts compose their own top-bar above it and drive dock visibility through `layout.toggleDock(dock)`. The primitive's `renderEmpty?: (dockId) => ReactNode` prop lets hosts supply a placeholder when a dock has no tabs.
 
-When changing the layout model, update `workspace/types.ts` and `workspace/store.ts` together and bump `STORAGE_VERSION`.
+When changing the layout model, update `workspace/types.ts` and `model/workspace/WorkspaceLayoutService.ts` together and bump `STORAGE_VERSION`.
 
 ## Project app shell (`common/src/project/`)
 
 `ProjectWorkspace` is the top-level component for the `/` route on web and desktop. It:
 
-- Reads the current project from `ProjectContext` (currently hardcoded to `{ id: 'demo', name: 'Demo Project' }`).
-- Owns a `useWorkspaceStore` keyed by `hc-project:<id>:workspace-v<version>`.
+- Constructs the model-layer `Project` via `useApp().openProject(projectId, { initialLayout })` once, inside a small `<ProjectModelBridge>` wrapper, and exposes it through `<ProjectProvider>` so descendants reach `useProject().layout` / `.fileTree` / `.textModels` / `.lsp` / etc.
+- Mounts a thin bridge tree as siblings of `<Workspace>`: `<LspBufferBridge />`, `<EditorFocusBridge />`, `<ActionHotkeyBridge />`, `<NativeMenuBridge />`. None of these provide React context — they translate model signals into platform side-effects (or vice versa, in EditorFocusBridge's case).
 - Renders `<ProjectTopBar />` (window chrome + dock toggles) above `<Workspace />`.
 
 Two registries sit above the workspace primitive's flat `TabRegistry`:
@@ -112,7 +111,7 @@ Required on every platform:
 
 Optional:
 
-- `apiBaseUrl: string` — absolute origin for the API host. Always set in practice; optional only so tests/SSR can omit it. See `common/src/auth/context.tsx` for why desktop bypasses the `wails://` handler.
+- `apiBaseUrl: string` — absolute origin for the API host. Always set in practice; optional only so tests/SSR can omit it. Desktop sets it to reach the Go server directly, bypassing the Wails `wails://` custom-scheme handler (which drops HTTP bodies; WebKit bug 192315).
 - `menu: MenuController` — desktop-only native menu bridge consumed by `NativeMenuBridge`.
 - `launchCode: LaunchCodeSource` — web supplies `createHashLaunchCodeSource()` (reads + strips `location.hash`). Desktop has no source yet — the Wails deep-link handoff is unbuilt.
 - Dev-only fields: `devDummyAuth`, `devMapIdOverride`, `devAuthUser`. Set from `import.meta.env.DEV`-gated env vars in the shell's `main.tsx` so production builds tree-shake them.
@@ -123,7 +122,7 @@ When adding platform-specific behavior, extend the `Platform` type rather than r
 
 The active project id is sourced **differently per platform — intentionally**:
 
-- **Web** reads it from `sessionStorage` (`hc-active-project`). Per-tab, cleared on tab close, survives reload. `AuthProvider` surfaces the project from the most recent redeem via context (`grantedProject`); the web page shell (`web/src/pages/index.tsx`) persists that into sessionStorage and reads it back. A brand-new tab with stored sessions but no fresh grant shows the "open from in-game" screen.
+- **Web** reads it from `sessionStorage` (`hc-active-project`). Per-tab, cleared on tab close, survives reload. `useAuth()` (a thin signal-reading hook over `EditorApp.auth`, the model-layer `AuthService`) surfaces the project from the most recent redeem (`grantedProject`); the web page shell (`web/src/pages/index.tsx`) persists that into sessionStorage and reads it back. A brand-new tab with stored sessions but no fresh grant shows the "open from in-game" screen.
 - **Desktop** reads it from the URL (`/#/project/:projectId`). The Go-side `WindowManager` opens each project in its own window with a distinct route. `grantedProject` is ignored on desktop (project list / launcher window is the entry point).
 
 Both flows feed into `ProjectWorkspace({ projectId })`, which uses `hc-project:<projectId>` as the workspace storage key. There is no shared "active project" helper — `getActiveProjectId` / `setActiveProjectId` in `common/src/auth/active-project.ts` are web-only and live there because the launch-grant plumbing they pair with is also web-only.
@@ -132,18 +131,12 @@ Both flows feed into `ProjectWorkspace({ projectId })`, which uses `hc-project:<
 
 ## Routes
 
-| Route         | Component                                              | Notes                                                              |
-| ------------- | ------------------------------------------------------ | ------------------------------------------------------------------ |
-| `/`           | `ProjectWorkspace` (from `@hollowcube/common/project`) | The real workspace                                                 |
-| `/playground` | `Playground` (from `@hollowcube/common/demo`)          | Counter, hotkey, query plumbing test surface                       |
-| `/editor`     | `EditorDemo`                                           | CodeEditor showcase (gutter icons, range highlights, context menu) |
-| `/ds`         | Design system reference page                           | Component swatches                                                 |
+| Route                   | Component                                              | Notes                                                                                          |
+| ----------------------- | ------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| `/`                     | `ProjectWorkspace` (from `@hollowcube/common/project`) | The real workspace (web: pulls the active project id from `sessionStorage`)                    |
+| `/project/:projectId`   | `ProjectWorkspace`                                     | Desktop only — each project window opens at this hash route via the launcher's WindowManager   |
 
 Page files in `web/src/pages/` and `desktop/frontend/src/pages/` are one-line re-exports — keep them that way.
-
-## Dev tooling
-
-`@hollowcube/common/dev` exports `<QueryDevtoolsToggle />`. The web/desktop `main.tsx` files mount it only when `import.meta.env.DEV`. It registers a `Mod+Shift+O` hotkey via `@tanstack/react-hotkeys` that mounts/unmounts `ReactQueryDevtools` — when unmounted, the floating corner button is gone too (it's part of the devtools UI). Production builds tree-shake the toggle out entirely.
 
 ## Toolchain & commands
 
@@ -158,7 +151,7 @@ Run all commands from the repo root unless noted.
 - `bun run lint` / `bun run lint:fix` — oxlint
 - `bun run format` / `bun run format:check` — oxfmt
 
-**Tests use `bun test`.** Scope is the model layer only: Zustand stores, plain-TS registries / classes, pure helpers, persistence migrations. Co-locate `*.test.ts` next to source. Do **not** add tests for React components, CodeMirror integration, the LSP worker end-to-end, or the Wails / native-menu bridge — those stay manually verified. Tests import from `bun:test` (`import { test, expect, describe, beforeEach } from 'bun:test'`). Do not introduce Vitest or Jest.
+**Tests use `bun test`.** Scope is the model layer only: service classes, plain-TS registries, pure helpers, persistence migrations. Co-locate `*.test.ts` next to source. Do **not** add tests for React components, CodeMirror integration, the LSP worker end-to-end, or the Wails / native-menu bridge — those stay manually verified. Tests import from `bun:test` (`import { test, expect, describe, beforeEach } from 'bun:test'`). Do not introduce Vitest or Jest.
 
 Workspace-scoped: `bun --filter @hollowcube/web <script>` (e.g. `typecheck`, `dev`, `build`).
 

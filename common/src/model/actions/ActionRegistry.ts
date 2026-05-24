@@ -1,19 +1,17 @@
-// `ActionRegistry` — the new signals-era command bus.
+// `ActionRegistry` — the signals-era command bus.
 //
 // Owns the set of registered actions and exposes the universal `run(id)`
-// entry point. Differs from the old `common/src/project/actions/registry-class.ts`
-// in three ways:
+// entry point. Two design points worth calling out:
 //
-//   • The registration set is stored in a signal so consumers (`enabledActions`,
-//     hotkey bridges, command palette) participate in the signals graph.
+//   • The registration set is stored in a signal so consumers
+//     (`enabledActions`, hotkey bridges, command palette) participate in
+//     the signals graph.
 //   • `Action.when` is a string expression; evaluation goes through
 //     `ContextService` so the `enabledActions` computed re-runs only when
 //     the specific keys it depends on change.
-//   • The `enabledActions` derived signal is the authoritative listing
-//     surface — no manual subscribe/version-counter dance for consumers.
 //
-// During Phases 2–6 this registry coexists with the old one. Phase 7
-// deletes the old one once every consumer has moved.
+// The `enabledActions` derived signal is the authoritative listing
+// surface — no manual subscribe/version-counter dance for consumers.
 
 import { computed, signal, type ReadonlySignal } from '../foundation/signal'
 import type { ContextService } from '../context/ContextService'

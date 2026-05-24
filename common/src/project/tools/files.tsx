@@ -14,7 +14,7 @@ import { useSignal } from '../../model/foundation/react'
 import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
 import { findLeaf, selectTabLocations } from '../../workspace'
 import { ActionContextMenu, useProjectActions } from '../actions'
-import { type Action } from '../actions/types'
+import { type ContextMenuAction } from '../actions/ActionContextMenu'
 import { TEXT_EDITOR_KIND } from '../editors/text'
 import { type ToolDefinition } from '../registry'
 import { buildFileTree, isTextContentType } from './files-tree'
@@ -415,8 +415,8 @@ function buildFilesContextActions(
     setNewFile: (target: NewFileTarget) => void,
     onDelete: (path: string) => void,
     onRename: (id: string) => void,
-): Action[] {
-    const actions: Action[] = []
+): ContextMenuAction[] {
+    const actions: ContextMenuAction[] = []
     const parent = newFileParent(ctx)
     actions.push({
         id: 'files.newFile',

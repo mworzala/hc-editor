@@ -1,18 +1,13 @@
-import { createContext, useContext, useMemo, useSyncExternalStore, type ReactNode } from 'react'
+import { useSyncExternalStore } from 'react'
 
-import { LspUiBus } from './lsp-ui-bus'
+import { useProject } from '../../model/foundation/react'
+import { type LspUiBus } from './lsp-ui-bus'
 
-const LspUiContext = createContext<LspUiBus | null>(null)
-
-export function LspUiProvider({ children }: { children: ReactNode }) {
-    const bus = useMemo(() => new LspUiBus(), [])
-    return <LspUiContext.Provider value={bus}>{children}</LspUiContext.Provider>
-}
+// LspUiBus now lives on `Project.lsp.ui`. These hooks read through to it so
+// existing call sites (just `<LspUiOverlay />`) keep working.
 
 export function useLspUiBus(): LspUiBus {
-    const ctx = useContext(LspUiContext)
-    if (!ctx) throw new Error('useLspUiBus must be used inside <LspUiProvider>')
-    return ctx
+    return useProject().lsp.ui
 }
 
 export function useLspUiSnapshot() {

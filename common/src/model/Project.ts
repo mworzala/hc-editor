@@ -14,7 +14,7 @@ import type { HCClient } from '@hollowcube/api'
 import { jsonLanguage } from '../editor/languages/json'
 import { luauLanguage } from '../editor/languages/luau'
 import type { Platform } from '../platform'
-import type { WorkspaceState } from '../workspace/types'
+import type { Tab, WorkspaceState } from '../workspace/types'
 import { ActionRegistry } from './actions/ActionRegistry'
 import { ActiveEditorRegistry } from './active-editor/ActiveEditorRegistry'
 import { ProjectBootstrap } from './bootstrap/ProjectBootstrap'
@@ -28,7 +28,22 @@ import { LanguageService } from './languages/LanguageService'
 import { LspService } from './lsp/LspService'
 import { SearchService } from './search/SearchService'
 import { TextModelService } from './text-models/TextModelService'
+import { findLeaf } from './workspace/tree-helpers'
 import { WorkspaceLayoutService } from './workspace/WorkspaceLayoutService'
+
+// Tool kinds known to the host. Mirrored here so `Project` can pre-declare
+// the `tool.<kind>` context-key derivations. Adding a new tool today
+// requires a one-line change here too; Phase 7 may switch this to a
+// dynamic registration if it earns its keep.
+const KNOWN_TOOL_KINDS = ['tool:files', 'tool:structure', 'tool:problems', 'tool:lsp-log'] as const
+
+function toolKindContextKey(kind: string): string {
+    // `tool:lsp-log` → `tool.lspLog`. Hyphens aren't legal in the
+    // when-clause grammar's identifier production; camelCase the suffix.
+    const slug = kind.slice('tool:'.length)
+    const camel = slug.replace(/-([a-z])/gu, (_, c: string) => c.toUpperCase())
+    return `tool.${camel}`
+}
 
 export interface ProjectDeps {
     projectId: string
@@ -67,14 +82,20 @@ export class Project {
         // Foundations (no deps).
         this.context = new ContextService()
         this.actions = new ActionRegistry({ context: this.context })
+
+        // One-shot static keys. `platform.desktop` gates desktop-only
+        // actions (e.g. `editor.closeFocusedTab`).
+        this.context.set('platform.desktop', deps.platform.kind === 'desktop')
+
+        this.activeEditor = new ActiveEditorRegistry()
         this.layout = new WorkspaceLayoutService({
             storage: deps.platform.storage,
             storageKey: `hc-project:${deps.projectId}`,
             initialState: deps.initialLayout,
+            actions: this.actions,
         })
-        this.activeEditor = new ActiveEditorRegistry()
         this.pendingFiles = new PendingFilesService()
-        this.search = new SearchService()
+        this.search = new SearchService({ actions: this.actions })
         this.languages = new LanguageService([jsonLanguage, luauLanguage])
 
         // Search-source registrations for the static slots. Domain
@@ -102,13 +123,24 @@ export class Project {
             client: deps.client,
             fileTree: this.fileTree,
             pendingFiles: this.pendingFiles,
+            actions: this.actions,
+            activeEditor: this.activeEditor,
+            layout: this.layout,
         })
+
+        // Editor / workspace context-key derivations. Most keys are pure
+        // functions of layout + textModels signals. lint:signals can't see
+        // through the `derive` callback (which is wrapped in `computed`)
+        // — the `.value` reads are intentional and tracked.
+        this._installContextDerivations()
 
         // Async subsystems.
         this.lsp = new LspService({
             textModels: this.textModels,
             context: this.context,
             search: this.search,
+            actions: this.actions,
+            activeEditor: this.activeEditor,
         })
         // Kick off LSP exactly once when the engineApi bundle resolves.
         // `lsp.start(bundle)` is idempotent for the running/starting
@@ -148,5 +180,56 @@ export class Project {
         this.layout.dispose()
         this.actions.dispose()
         this.context.dispose()
+    }
+
+    private _installContextDerivations(): void {
+        const { context, layout, textModels, activeEditor } = this
+
+        const focusedActiveTab = (): Tab | null => {
+            // lint:signals-ignore
+            const state = layout.state.value
+            if (!state.focusedLeafId) return null
+            const leaf = findLeaf(state.center, state.focusedLeafId)
+            if (!leaf || !leaf.activeId) return null
+            return leaf.tabs.find((t) => t.id === leaf.activeId) ?? null
+        }
+
+        context.derive('editor.focused', () => {
+            const tab = focusedActiveTab()
+            return tab !== null && !tab.kind.startsWith('tool:')
+        })
+
+        context.derive('editor.text', () => {
+            const tab = focusedActiveTab()
+            return tab?.kind === 'editor:text'
+        })
+
+        context.derive('editor.dirty', () => {
+            // lint:signals-ignore
+            const docId = activeEditor.activeDocId.value
+            if (!docId) return false
+            const model = textModels.get(docId)
+            if (!model) return false
+            // lint:signals-ignore
+            return model.dirty.value
+        })
+
+        context.derive('editor.anyDirty', () => {
+            // lint:signals-ignore
+            return textModels.anyDirty.value
+        })
+
+        // tool.<kind> keys — true when the tool is mounted in any dock.
+        for (const kind of KNOWN_TOOL_KINDS) {
+            const key = toolKindContextKey(kind)
+            context.derive(key, () => {
+                // lint:signals-ignore
+                const state = layout.state.value
+                for (const dock of ['left', 'right', 'bottom'] as const) {
+                    if (state[dock].tabs.some((t) => t.kind === kind)) return true
+                }
+                return false
+            })
+        }
     }
 }

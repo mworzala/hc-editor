@@ -22,9 +22,12 @@ import type {
     ToolDockState,
     WorkspaceState,
 } from '../../workspace/types'
+import type { ActionRegistry } from '../actions/ActionRegistry'
 import { computed, signal, type ReadonlySignal } from '../foundation/signal'
 import { readPersisted, writePersisted } from './persistence'
 import {
+    findFirstLeaf,
+    findLeaf,
     pruneEmptyLeaves,
     rebindFocusIfMissing,
     splitLeafInTree,
@@ -38,6 +41,9 @@ export interface WorkspaceLayoutServiceDeps {
     storage: Storage
     storageKey: string
     initialState: WorkspaceState
+    /** Optional action registry; when provided the service registers its
+     *  own actions (close focused tab, toggle docks) in the constructor. */
+    actions?: ActionRegistry
     /** Debounce window (ms) for persisted writes. Defaults to 75ms. Set
      *  to 0 for tests (synchronous writes). */
     persistDebounceMs?: number
@@ -99,6 +105,7 @@ export class WorkspaceLayoutService {
 
     private readonly _debouncedWrite: (state: WorkspaceState) => void
     private _persistTimer: ReturnType<typeof setTimeout> | null = null
+    private readonly _actionDisposers: Array<() => void> = []
     private _disposed = false
 
     constructor(private readonly deps: WorkspaceLayoutServiceDeps) {
@@ -111,6 +118,7 @@ export class WorkspaceLayoutService {
                 this._persistTimer = t
             },
         )
+        if (deps.actions) this._registerActions(deps.actions)
     }
 
     // === Sizing ===
@@ -276,6 +284,23 @@ export class WorkspaceLayoutService {
         this._persist()
     }
 
+    /** Close the currently focused leaf's active tab. Falls back to the
+     *  first leaf when no leaf is focused. No-op if there's no tab to
+     *  close. Bound to `editor.closeFocusedTab`. */
+    closeFocusedTab(): void {
+        const state = this._snapshot()
+        const focusedId = state.focusedLeafId
+        let leafId = focusedId
+        let leaf = focusedId ? findLeaf(state.center, focusedId) : null
+        if (!leaf) {
+            leaf = findFirstLeaf(state.center)
+            leafId = leaf.id
+        }
+        const active = leaf.tabs.find((t) => t.id === leaf!.activeId) ?? leaf.tabs[0]
+        if (!active || !leafId) return
+        this.closeTab({ kind: 'editor', leafId }, active.id)
+    }
+
     // === Transient drag state (not persisted) ===
 
     setActiveDrag(drag: ActiveDragState | null): void {
@@ -304,6 +329,41 @@ export class WorkspaceLayoutService {
             clearTimeout(this._persistTimer)
             this._persistTimer = null
         }
+        for (const d of this._actionDisposers) d()
+        this._actionDisposers.length = 0
+    }
+
+    private _registerActions(actions: ActionRegistry): void {
+        this._actionDisposers.push(
+            actions.register({
+                id: 'editor.closeFocusedTab',
+                title: 'Close Tab',
+                keybinding: '$mod+w',
+                // Browser reserves $mod+w; only register the hotkey on
+                // desktop. The when-clause gates the hotkey bridge.
+                when: 'platform.desktop',
+                menu: { path: 'file', group: 'tabs', order: 20 },
+                run: () => this.closeFocusedTab(),
+            }),
+            actions.register({
+                id: 'workspace.toggleDock.left',
+                title: 'Toggle Left Dock',
+                menu: { path: 'view', group: 'docks', order: 10 },
+                run: () => this.toggleDock('left'),
+            }),
+            actions.register({
+                id: 'workspace.toggleDock.right',
+                title: 'Toggle Right Dock',
+                menu: { path: 'view', group: 'docks', order: 20 },
+                run: () => this.toggleDock('right'),
+            }),
+            actions.register({
+                id: 'workspace.toggleDock.bottom',
+                title: 'Toggle Bottom Dock',
+                menu: { path: 'view', group: 'docks', order: 30 },
+                run: () => this.toggleDock('bottom'),
+            }),
+        )
     }
 
     // === Internals ===

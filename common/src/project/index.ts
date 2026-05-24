@@ -16,33 +16,14 @@ export {
     useTool,
 } from './registry-context'
 export {
-    useProjectActions,
-    useRegisterAction,
-    useActions,
-    useRunAction,
-    ActionRegistryProvider,
     ActionHotkeyBridge,
-    type Action,
-    type ActionContextSet,
-    type ActionRunContext,
-    type ActionRunSource,
+    ActionContextMenu,
+    NativeMenuBridge,
+    useProjectActions,
+    useProjectActionsForLayout,
+    type ContextMenuAction,
     type OpenEditorArgs,
     type OpenEditorTarget,
     type ProjectActions,
 } from './actions'
 export { AppErrorBoundary, ProjectErrorBoundary, PaneErrorBoundary } from './error-boundary'
-export { ProjectServices, type LuauLspSnapshot } from './services'
-export {
-    ProjectServicesProvider,
-    ServicesActionRegistryAdapter,
-    useProjectServices,
-} from './services-context'
-export {
-    ContextKeys,
-    contextMatches,
-    type ContextKey,
-    type ToolKey,
-    type EditorKey,
-    type LspKey,
-} from './actions/context-keys'
-export { ActionRegistry } from './actions/registry-class'

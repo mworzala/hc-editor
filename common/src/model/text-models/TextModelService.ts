@@ -24,6 +24,8 @@ import {
     type MapFile,
 } from '@hollowcube/api'
 
+import type { ActionRegistry } from '../actions/ActionRegistry'
+import type { ActiveEditorRegistry } from '../active-editor/ActiveEditorRegistry'
 import {
     computed,
     effect,
@@ -33,12 +35,19 @@ import {
 import { Emitter, type Event } from '../foundation/emitter'
 import type { FileTreeService } from '../files/FileTreeService'
 import type { PendingFilesService } from '../files/PendingFilesService'
+import type { WorkspaceLayoutService } from '../workspace/WorkspaceLayoutService'
+import { makeId, resolveTargetLeaf } from '../workspace/tree-helpers'
 import {
     createTextModel,
     type DocumentId,
     type TextModel,
     type TextModelInternal,
 } from './TextModel'
+
+// Kept in sync with `common/src/project/editors/text-kind.ts`. The model
+// layer can't import from the project layer, and `editor.newFile` opens a
+// text-editor tab — so the kind constant is mirrored here.
+const TEXT_EDITOR_KIND = 'editor:text'
 
 const AUTOSAVE_DELAY_MS = 800
 
@@ -62,6 +71,16 @@ export interface TextModelServiceDeps {
     client: HCClient
     fileTree: FileTreeService
     pendingFiles: PendingFilesService
+    /** Optional. When provided the service registers
+     *  `editor.save` / `editor.saveAll` / `editor.revert` / `editor.newFile`
+     *  in the constructor. Tests that don't exercise actions can omit. */
+    actions?: ActionRegistry
+    /** Required when `actions` is provided. The save/format/revert
+     *  handlers resolve the focused doc via `activeEditor.activeDocId`. */
+    activeEditor?: ActiveEditorRegistry
+    /** Required when `actions` is provided. `editor.newFile` opens a new
+     *  untitled tab through this service. */
+    layout?: WorkspaceLayoutService
 }
 
 export class TextModelService {
@@ -106,7 +125,11 @@ export class TextModelService {
 
     readonly events: Event<TextModelServiceEvent> = this._events.event
 
-    constructor(private readonly deps: TextModelServiceDeps) {}
+    private readonly _actionDisposers: Array<() => void> = []
+
+    constructor(private readonly deps: TextModelServiceDeps) {
+        if (deps.actions) this._registerActions()
+    }
 
     /** Open a model (or reuse an existing one). Refcounted: each call
      *  bumps the refcount; `close` decrements. The first opener supplies
@@ -239,6 +262,8 @@ export class TextModelService {
     }
 
     dispose(): void {
+        for (const d of this._actionDisposers) d()
+        this._actionDisposers.length = 0
         for (const dispose of this._autosaveDisposers.values()) dispose()
         this._autosaveDisposers.clear()
         for (const t of this._autosaveTimers.values()) clearTimeout(t)
@@ -249,6 +274,64 @@ export class TextModelService {
         this._modelIds.value = []
         this._conflicts.value = new Set()
         this._events.dispose()
+    }
+
+    private _registerActions(): void {
+        const { actions, activeEditor, layout, pendingFiles } = this.deps
+        if (!actions || !activeEditor) return
+
+        const focusedEntrySave = () => {
+            const tabId = activeEditor.activeDocId.peek()
+            if (!tabId) return
+            const entry = activeEditor.get(tabId)
+            if (entry?.save) void entry.save()
+        }
+
+        this._actionDisposers.push(
+            actions.register({
+                id: 'editor.save',
+                title: 'Save',
+                group: 'edit',
+                keybinding: '$mod+s',
+                when: 'editor.text && editor.dirty',
+                menu: { path: 'file', group: 'save', order: 10 },
+                run: () => focusedEntrySave(),
+            }),
+            actions.register({
+                id: 'editor.saveAll',
+                title: 'Save All',
+                group: 'edit',
+                when: 'editor.anyDirty',
+                menu: { path: 'file', group: 'save', order: 20 },
+                run: () => {
+                    void this.saveAll()
+                },
+            }),
+        )
+
+        if (layout) {
+            this._actionDisposers.push(
+                actions.register({
+                    id: 'editor.newFile',
+                    title: 'New Untitled File',
+                    keybinding: '$mod+n',
+                    menu: { path: 'file', group: 'new', order: 10 },
+                    run: () => {
+                        const tempId = pendingFiles.addUntitled()
+                        const leaf = resolveTargetLeaf(layout.state.peek())
+                        layout.addTab(
+                            { kind: 'editor', leafId: leaf.id },
+                            {
+                                id: makeId('tab'),
+                                kind: TEXT_EDITOR_KIND,
+                                title: 'Untitled',
+                                payload: { tempId },
+                            },
+                        )
+                    },
+                }),
+            )
+        }
     }
 
     // ------------- internals -------------

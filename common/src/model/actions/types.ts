@@ -1,17 +1,14 @@
-// Action shape for the new (signals-era) action registry.
+// Action shape for the signals-era action registry.
 //
-// Intentionally duplicates the existing `common/src/project/actions/types.ts`
-// for the duration of the migration. The differences are:
+// Two design choices vs. the old (deleted) action surface:
 //
-//   • `when` is now a string expression evaluated against `ContextService`
-//     (the architecture's universal context-key surface), not a `() =>
-//     boolean` closure. This is what lets `enabledActions` participate in
-//     the reactive graph.
-//   • `contexts: readonly string[]` is dropped — fold whatever tag check
-//     was there into the `when` expression.
-//
-// The old type stays until Phase 6 has moved every consumer onto the new
-// surface; Phase 7 deletes the old types file outright.
+//   • `when` is a string expression evaluated against `ContextService`
+//     (the universal context-key surface), not a `() => boolean` closure.
+//     This is what lets `enabledActions` participate in the reactive
+//     graph — the computed re-evaluates only when keys referenced by some
+//     action's when-clause change.
+//   • There is no `contexts: readonly string[]`. Whatever availability
+//     check was there folds into the `when` expression.
 
 export const MENU_PATHS = ['file', 'edit', 'view', 'help'] as const
 export type MenuPath = (typeof MENU_PATHS)[number]

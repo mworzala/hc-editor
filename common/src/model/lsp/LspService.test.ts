@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { HCClient } from '@hollowcube/api'
 
+import { ActionRegistry } from '../actions/ActionRegistry'
 import { ContextService } from '../context/ContextService'
 import { FileTreeService } from '../files/FileTreeService'
 import { PendingFilesService } from '../files/PendingFilesService'
@@ -18,6 +19,7 @@ import { LspService } from './LspService'
 const fakeClient = {} as HCClient
 
 let context: ContextService
+let actions: ActionRegistry
 let fileTree: FileTreeService
 let pendingFiles: PendingFilesService
 let textModels: TextModelService
@@ -25,6 +27,7 @@ let search: SearchService
 
 beforeEach(() => {
     context = new ContextService()
+    actions = new ActionRegistry({ context })
     fileTree = new FileTreeService({ projectId: 'p1', client: fakeClient })
     pendingFiles = new PendingFilesService()
     textModels = new TextModelService({
@@ -33,7 +36,7 @@ beforeEach(() => {
         fileTree,
         pendingFiles,
     })
-    search = new SearchService()
+    search = new SearchService({ actions })
 })
 
 afterEach(() => {

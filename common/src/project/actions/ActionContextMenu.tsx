@@ -9,32 +9,38 @@ import {
 } from '@hollowcube/design-system'
 
 import { usePointAnchor } from '../../utils/virtual-anchor'
-import { actionMatchesContext, useActionContextSet } from './context'
-import { type Action, type ActionRunContext } from './types'
 
-// Reusable context-menu component fed by an `Action[]`. Replaces the ad-hoc
-// DropdownMenu boilerplate that used to live in `tools/files.tsx` and
-// `editor/components/EditorContextMenu.tsx`.
+// Reusable context-menu component fed by an ad-hoc `ContextMenuAction[]`.
+// Hosts build the action list at right-click time and pass it in — each
+// action's `run` closure captures the target (file path, token, etc.).
 //
-// Convention: the host builds the action list at right-click time, so each
-// action's `run` closure captures the target (file path, token, etc.). The
-// menu just renders the list and dispatches.
+// Unlike actions registered on `Project.actions`, these never participate
+// in the global registry / hotkey bridge: they're scoped to one menu
+// invocation. Keeping the type local is what lets us carry view-only
+// concerns like `icon: ReactNode`.
 //
-// Items are split into groups by `action.group`; consecutive items with the
-// same group sit next to each other, transitions get a separator. Items where
-// `actionMatchesContext` returns false are omitted entirely (treat as "not
-// applicable"). Items where `disabled === true` are shown greyed-out — that's
-// for affordance ("Find Usages" without a token on the cursor).
+// Items group by `action.group`; consecutive items with the same group sit
+// next to each other, and transitions get a separator. `disabled === true`
+// renders the item greyed-out (affordance — clicks are no-ops).
+
+export type ContextMenuAction = {
+    id: string
+    title: string
+    /** Optional grouping label; visually separates groups. */
+    group?: string
+    icon?: ReactNode
+    keybinding?: string
+    danger?: boolean
+    disabled?: boolean
+    run: () => void | Promise<void>
+}
 
 export type ActionContextMenuProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     x: number
     y: number
-    actions: readonly Action[]
-    /** Optional args bag applied to every action.run in this menu. Convenient
-     *  when many actions in the same menu share a target. */
-    runArgs?: Record<string, unknown>
+    actions: readonly ContextMenuAction[]
     className?: string
 }
 
@@ -47,49 +53,41 @@ export function ActionContextMenu({
     x,
     y,
     actions,
-    runArgs,
     className,
 }: ActionContextMenuProps) {
     const anchor = usePointAnchor(x, y)
-    const activeCtx = useActionContextSet()
 
-    const visible = useMemo(
-        () => actions.filter((a) => actionMatchesContext(activeCtx, a.contexts)),
-        [actions, activeCtx],
-    )
-
-    const close = () => onOpenChange(false)
-
-    const items: ReactNode[] = []
-    let prevGroup: string | undefined
-    for (const action of visible) {
-        if (action.when && !action.when()) continue
-        if (prevGroup !== undefined && action.group !== prevGroup) {
-            items.push(<DropdownMenuSeparator key={`sep-${action.id}`} />)
+    const items = useMemo<ReactNode[]>(() => {
+        const out: ReactNode[] = []
+        let prevGroup: string | undefined
+        for (const action of actions) {
+            if (prevGroup !== undefined && action.group !== prevGroup) {
+                out.push(<DropdownMenuSeparator key={`sep-${action.id}`} />)
+            }
+            prevGroup = action.group
+            out.push(
+                <DropdownMenuItem
+                    key={action.id}
+                    disabled={action.disabled}
+                    variant={action.danger ? 'destructive' : 'default'}
+                    onClick={() => {
+                        onOpenChange(false)
+                        if (action.disabled) return
+                        void action.run()
+                    }}
+                >
+                    {action.icon ? <span className='inline-flex'>{action.icon}</span> : null}
+                    <span>{action.title}</span>
+                    {action.keybinding ? (
+                        <DropdownMenuShortcut>
+                            {formatKeybinding(action.keybinding)}
+                        </DropdownMenuShortcut>
+                    ) : null}
+                </DropdownMenuItem>,
+            )
         }
-        prevGroup = action.group
-        items.push(
-            <DropdownMenuItem
-                key={action.id}
-                disabled={action.disabled}
-                variant={action.danger ? 'destructive' : 'default'}
-                onClick={() => {
-                    close()
-                    if (action.disabled) return
-                    const ctx: ActionRunContext = { source: 'context-menu', args: runArgs }
-                    void action.run(ctx)
-                }}
-            >
-                {action.icon ? <span className='inline-flex'>{action.icon}</span> : null}
-                <span>{action.title}</span>
-                {action.keybinding ? (
-                    <DropdownMenuShortcut>
-                        {formatKeybinding(action.keybinding)}
-                    </DropdownMenuShortcut>
-                ) : null}
-            </DropdownMenuItem>,
-        )
-    }
+        return out
+    }, [actions, onOpenChange])
 
     if (!open) return null
     return (
@@ -99,12 +97,11 @@ export function ActionContextMenu({
                 side='bottom'
                 align='start'
                 className={className}
-                // A context menu is opened at a virtual point (no real
-                // trigger), so base-ui's default "restore focus to whatever
-                // had it before" steals focus away from anything an action's
-                // run() might mount (e.g. the rename-file input the "New
-                // file…" action shows). Opt out — actions that need focus
-                // will grab it themselves.
+                // A context menu opens at a virtual point (no real trigger),
+                // so base-ui's default "restore focus to whatever had it
+                // before" steals focus away from anything an action's run()
+                // might mount (e.g. the rename-file input the "New file…"
+                // action shows). Opt out — actions that need focus grab it.
                 finalFocus={false}
             >
                 {items.length > 0 ? (

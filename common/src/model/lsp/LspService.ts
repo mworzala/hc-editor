@@ -19,11 +19,21 @@
 //     error count (severity 1). The file-tree row badges subscribe to
 //     this.
 
-import type { Diagnostic } from 'vscode-languageserver-types'
+import type {
+    CodeAction,
+    CodeActionContext,
+    Command,
+    Diagnostic,
+    Range,
+    WorkspaceEdit,
+} from 'vscode-languageserver-types'
 
+import { runFormatOnView } from '../../editor/formatters/runFormat'
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
 import type { EngineApiBundle } from '../../engine-api/bundle'
+import { stringTokenAt } from '../../editor/extensions/tokens'
 import { createApplyWorkspaceEditHandler } from '../../lsp/applyWorkspaceEdit'
+import { offsetToPosition, rangeToOffsets } from '../../lsp/cm/lspUtils'
 import { definitionFiles } from '../../lsp/definitionFiles'
 import {
     applyEngineApiModules,
@@ -33,8 +43,11 @@ import {
 } from '../../lsp/docModules'
 import { loadLuauFFlags } from '../../lsp/fflags'
 import { LspClient, type LspState } from '../../lsp/LspClient'
+import { LspUiBus } from '../../lsp/ui/lsp-ui-bus'
 import { pathFromFileUri } from '../../lsp/uriResolver'
 import { startWorkspaceDiagnosticPolling } from '../../lsp/workspaceDiagnostics'
+import type { ActionRegistry } from '../actions/ActionRegistry'
+import type { ActiveEditorRegistry } from '../active-editor/ActiveEditorRegistry'
 import type { ContextService } from '../context/ContextService'
 import {
     computed,
@@ -45,10 +58,24 @@ import {
 import type { SearchService } from '../search/SearchService'
 import type { TextModelService } from '../text-models/TextModelService'
 
+/** LSP `PrepareRenameResult` covers three response shapes the server can
+ *  send. `vscode-languageserver-types` doesn't ship a union for it, so we
+ *  inline the discriminator here. */
+type PrepareRenameResult =
+    | (Range & { placeholder?: never })
+    | { range: Range; placeholder: string }
+    | { defaultBehavior: true }
+
 export interface LspServiceDeps {
     textModels: TextModelService
     context: ContextService
     search?: SearchService
+    /** Optional. When provided the service registers
+     *  `editor.format` / `editor.codeAction` / `editor.rename`. */
+    actions?: ActionRegistry
+    /** Required when `actions` is provided. Action handlers resolve the
+     *  focused editor entry via `activeEditor.activeDocId`. */
+    activeEditor?: ActiveEditorRegistry
 }
 
 type WorkerFactory = () => Worker
@@ -69,12 +96,19 @@ export class LspService {
     private _stopStateListener: (() => void) | null = null
     private _worker: Worker | null = null
     private readonly _contextDisposers: Array<() => void> = []
+    private readonly _actionDisposers: Array<() => void> = []
     private readonly _searchSourceDisposer: (() => void) | null
     private readonly _workerFactory: WorkerFactory
     private _disposed = false
 
     readonly status: ReadonlySignal<LspState> = this._status
     readonly client: ReadonlySignal<LspClient | null> = this._client
+
+    /** Floating-UI bus for the code-action menu + rename prompt overlay.
+     *  Lives on the service so action handlers (registered below) can
+     *  open the UI without React indirection; the overlay component
+     *  subscribes via `useLspUi(...)`. */
+    readonly ui: LspUiBus = new LspUiBus()
 
     /** Project-relative path → number of severity-1 (error) diagnostics.
      *  Walks the per-URI signal cache; recomputes when any cached signal
@@ -113,6 +147,7 @@ export class LspService {
         )
         this._searchSourceDisposer =
             this.deps.search?.register({ id: 'symbols', title: 'Symbols' }) ?? null
+        if (this.deps.actions) this._registerActions()
     }
 
     /** Return (lazy-create) the per-URI diagnostic signal. Consumers
@@ -240,11 +275,241 @@ export class LspService {
         if (this._disposed) return
         this._disposed = true
         void this.stop()
+        for (const d of this._actionDisposers) d()
+        this._actionDisposers.length = 0
         for (const d of this._contextDisposers) d()
         this._contextDisposers.length = 0
         this._searchSourceDisposer?.()
         this._diagnosticsByUri.clear()
     }
+
+    // ----- Action handlers -----
+
+    private _registerActions(): void {
+        const { actions, activeEditor } = this.deps
+        if (!actions || !activeEditor) return
+
+        const focusedEntry = () => {
+            const tabId = activeEditor.activeDocId.peek()
+            if (!tabId) return null
+            return activeEditor.get(tabId) ?? null
+        }
+
+        const runFormat = async () => {
+            const entry = focusedEntry()
+            if (!entry) return
+            await runFormatOnView(entry.view, entry.language)
+        }
+
+        const runCodeAction = async () => {
+            const entry = focusedEntry()
+            if (!entry || !entry.lspUri) return
+            const client = this._client.peek()
+            if (!client || this._status.peek() !== 'running') return
+            const { view, lspUri: uri } = entry
+            const selection = view.state.selection.main
+            const lspRange: Range = {
+                start: offsetToPosition(view.state.doc, selection.from),
+                end: offsetToPosition(view.state.doc, selection.to),
+            }
+            const overlapping = overlappingDiagnostics(client.getDiagnostics(uri), lspRange)
+            const codeActionContext: CodeActionContext = {
+                diagnostics: overlapping,
+                only: undefined,
+                triggerKind: 1,
+            }
+            let result: (CodeAction | Command)[] | null = null
+            try {
+                result = await client.sendRequest<(CodeAction | Command)[] | null>(
+                    'textDocument/codeAction',
+                    { textDocument: { uri }, range: lspRange, context: codeActionContext },
+                )
+            } catch (err) {
+                console.warn('[lsp] codeAction failed', err)
+                return
+            }
+            const items = (result ?? []).filter((a) => !(a as CodeAction).disabled) as (
+                | CodeAction
+                | Command
+            )[]
+
+            const coords = view.coordsAtPos(selection.head)
+            const x = coords?.left ?? window.innerWidth / 2
+            const y = (coords?.bottom ?? window.innerHeight / 2) + 4
+
+            this.ui.openCodeActionMenu({
+                x,
+                y,
+                items,
+                onSelect: (item) => {
+                    void applyCodeAction(client, item)
+                },
+            })
+        }
+
+        const runRename = async () => {
+            const entry = focusedEntry()
+            if (!entry || !entry.lspUri) return
+            const client = this._client.peek()
+            if (!client || this._status.peek() !== 'running') return
+            const { view, lspUri: uri } = entry
+            const head = view.state.selection.main.head
+            const lspPos = offsetToPosition(view.state.doc, head)
+
+            let initialName = ''
+            let anchorOffset = head
+
+            try {
+                const prep = await client.sendRequest<PrepareRenameResult | null>(
+                    'textDocument/prepareRename',
+                    { textDocument: { uri }, position: lspPos },
+                )
+                if (prep) {
+                    if ('placeholder' in prep && typeof prep.placeholder === 'string') {
+                        initialName = prep.placeholder
+                        const r = rangeToOffsets(view.state.doc, prep.range)
+                        anchorOffset = r.from
+                    } else if ('range' in prep) {
+                        const r = rangeToOffsets(view.state.doc, (prep as { range: Range }).range)
+                        anchorOffset = r.from
+                        initialName = view.state.doc.sliceString(r.from, r.to)
+                    } else if ('start' in prep && 'end' in prep) {
+                        const r = rangeToOffsets(view.state.doc, prep as unknown as Range)
+                        anchorOffset = r.from
+                        initialName = view.state.doc.sliceString(r.from, r.to)
+                    }
+                }
+            } catch {
+                // Server doesn't support prepareRename — fall back to token at cursor.
+            }
+
+            if (!initialName) {
+                const token = stringTokenAt(view, head)
+                if (!token) return
+                initialName = token.token
+                anchorOffset = token.from
+            }
+
+            const coords = view.coordsAtPos(anchorOffset)
+            const x = coords?.left ?? window.innerWidth / 2
+            const y = (coords?.bottom ?? window.innerHeight / 2) + 4
+
+            this.ui.openRenamePrompt({
+                x,
+                y,
+                initialName,
+                onConfirm: (newName) => {
+                    void doRename(client, uri, lspPos, newName)
+                },
+            })
+        }
+
+        this._actionDisposers.push(
+            actions.register({
+                id: 'editor.format',
+                title: 'Format document',
+                group: 'edit',
+                keybinding: '$mod+alt+l',
+                when: 'editor.text',
+                menu: { path: 'edit', group: 'format', order: 10 },
+                run: () => {
+                    void runFormat()
+                },
+            }),
+            actions.register({
+                id: 'editor.codeAction',
+                title: 'Quick Fix / Refactor…',
+                group: 'edit',
+                keybinding: '$mod+.',
+                when: 'editor.text && lsp.luau.running',
+                run: () => {
+                    void runCodeAction()
+                },
+            }),
+            actions.register({
+                id: 'editor.rename',
+                title: 'Rename Symbol',
+                group: 'edit',
+                keybinding: 'f2',
+                when: 'editor.text && lsp.luau.running',
+                run: () => {
+                    void runRename()
+                },
+            }),
+        )
+    }
+}
+
+function overlappingDiagnostics(diagnostics: readonly Diagnostic[], range: Range): Diagnostic[] {
+    return diagnostics.filter((d) => rangesOverlap(d.range, range))
+}
+
+function rangesOverlap(a: Range, b: Range): boolean {
+    if (cmp(a.end, b.start) < 0) return false
+    if (cmp(b.end, a.start) < 0) return false
+    return true
+}
+
+function cmp(a: { line: number; character: number }, b: { line: number; character: number }) {
+    if (a.line !== b.line) return a.line - b.line
+    return a.character - b.character
+}
+
+async function applyCodeAction(client: LspClient, item: CodeAction | Command): Promise<void> {
+    const isCommand = !('kind' in item) && 'command' in item && typeof item.command === 'string'
+    if (isCommand) {
+        const cmd = item as Command
+        try {
+            await client.executeCommand(cmd.command, cmd.arguments)
+        } catch (err) {
+            console.warn('[lsp] executeCommand failed', err)
+        }
+        return
+    }
+    let action = item as CodeAction
+    if (!action.edit && !action.command && action.data !== undefined) {
+        try {
+            const resolved = await client.sendRequest<CodeAction | null>(
+                'codeAction/resolve',
+                action,
+            )
+            if (resolved) action = resolved
+        } catch (err) {
+            console.warn('[lsp] codeAction/resolve failed', err)
+            return
+        }
+    }
+    if (action.edit) {
+        await client.applyWorkspaceEdit(action.edit)
+    }
+    if (action.command) {
+        try {
+            await client.executeCommand(action.command.command, action.command.arguments)
+        } catch (err) {
+            console.warn('[lsp] code action command failed', err)
+        }
+    }
+}
+
+async function doRename(
+    client: LspClient,
+    uri: string,
+    position: { line: number; character: number },
+    newName: string,
+): Promise<void> {
+    let result: WorkspaceEdit | null = null
+    try {
+        result = await client.sendRequest<WorkspaceEdit | null>('textDocument/rename', {
+            textDocument: { uri },
+            position,
+            newName,
+        })
+    } catch (err) {
+        console.warn('[lsp] rename failed', err)
+        return
+    }
+    if (!result) return
+    await client.applyWorkspaceEdit(result)
 }
 
 // Re-export the fileUri helper so consumers can stay model-only.

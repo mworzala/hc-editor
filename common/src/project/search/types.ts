@@ -1,11 +1,11 @@
-import type { ReactNode } from 'react'
 import type { SymbolKind } from 'vscode-languageserver-types'
 
 import type { MapFile } from '@hollowcube/api'
 
-import type { Action } from '../actions/types'
+import type { Action } from '../../model/actions/types'
+import type { SearchTab } from '../../model/search/SearchService'
 
-export type SearchTab = 'all' | 'actions' | 'files' | 'text' | 'symbols' | 'docs'
+export type { SearchTab }
 
 export const SEARCH_TABS: readonly { id: SearchTab; label: string }[] = [
     { id: 'all', label: 'All' },
@@ -24,7 +24,6 @@ export type SearchResult =
           id: string
           title: string
           subtitle?: string
-          icon?: ReactNode
           keybinding?: string
           matches: number[]
           score: number

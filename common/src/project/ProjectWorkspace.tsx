@@ -2,36 +2,28 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 import { TooltipProvider } from '@hollowcube/design-system'
 
-import { LspActions, LspUiOverlay, LspUiProvider } from '../lsp/ui'
-import { useApp } from '../model'
+import { LspUiOverlay } from '../lsp/ui'
+import { useApp, useProject } from '../model'
 import { ProjectGate } from '../model/bootstrap'
-import { usePendingFilesService } from '../model/files'
 import { ProjectProvider as ModelProjectProvider } from '../model/foundation/react'
-import { useLayout } from '../model/workspace'
-import { makeId, resolveTargetLeaf, Workspace, type DockId } from '../workspace'
-import {
-    ActionContextProvider,
-    ActionHotkeyBridge,
-    EditorActions,
-    NativeMenuBridge,
-    useProjectActions,
-    useRegisterAction,
-} from './actions'
-import { CloseFocusedTabAction, useTabContextMenu } from './data/tab-actions'
+import { Workspace, type DockId } from '../workspace'
+import { ActionHotkeyBridge, NativeMenuBridge, useProjectActions } from './actions'
+import { useDoubleTapKey } from './actions/double-tap'
+import { useTabContextMenu } from './data/tab-actions'
 import { DockAddToolButton } from './DockAddToolButton'
 import { DockEmptyState } from './DockEmptyState'
 import { apiTestEditor } from './editors/api-test'
 import { docsEditor } from './editors/docs'
-import { TEXT_EDITOR_KIND, textEditor } from './editors/text'
+import { textEditor } from './editors/text'
 import { welcomeEditor } from './editors/welcome'
+import { EditorFocusBridge } from './EditorFocusBridge'
 import { ProjectErrorBoundary } from './error-boundary'
 import { createInitialWorkspaceState } from './initial-state'
 import { LspBufferBridge } from './LspBufferBridge'
 import { ProjectTopBar } from './ProjectTopBar'
 import { type AnyEditorDefinition, type ToolDefinition } from './registry'
 import { RegistryProvider, useTabRegistry, useTools } from './registry-context'
-import { SearchActions, SearchPopup } from './search'
-import { ProjectServicesProvider, ServicesActionRegistryAdapter } from './services-context'
+import { SearchPopup } from './search'
 import { filesTool } from './tools/files'
 import { lspLogTool } from './tools/lsp-log'
 import { problemsTool } from './tools/problems'
@@ -58,16 +50,13 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                     )}
                 >
                     <RegistryProvider tools={TOOLS} editors={EDITORS}>
-                        <ProjectServicesProvider>
-                            <ServicesActionRegistryAdapter>
-                                <TooltipProvider>
-                                    <LspUiProvider>
-                                        <LspBufferBridge />
-                                        <ProjectWorkspaceInner />
-                                    </LspUiProvider>
-                                </TooltipProvider>
-                            </ServicesActionRegistryAdapter>
-                        </ProjectServicesProvider>
+                        <TooltipProvider>
+                            <LspBufferBridge />
+                            <EditorFocusBridge />
+                            <ActionHotkeyBridge />
+                            <NativeMenuBridge />
+                            <ProjectWorkspaceInner />
+                        </TooltipProvider>
                     </RegistryProvider>
                 </ProjectGate>
             </ProjectModelBridge>
@@ -75,11 +64,9 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
     )
 }
 
-// Phase 2 bridge: constructs the model-layer `Project` once via
-// `app.openProject(projectId, ...)` and exposes it through
-// `<ProjectProvider>` so workspace consumers can reach
-// `useProject().layout` / `.fileTree` / `.textModels` / `.lsp` / etc.
-// Phase 6 will collapse this into the page shell.
+// Constructs the model-layer `Project` once via `app.openProject(...)` and
+// exposes it through `<ProjectProvider>`. Page shells call us with the
+// project id; everything below reads via `useProject()`.
 function ProjectModelBridge({
     projectId,
     children,
@@ -112,34 +99,30 @@ function ProjectModelBridge({
 function ProjectWorkspaceInner() {
     const tabRegistry = useTabRegistry()
     const tabContextMenu = useTabContextMenu()
+    const search = useProject().search
 
     const renderEmpty = useCallback((dockId: DockId) => <EmptyDockContent dockId={dockId} />, [])
     const renderToolDockAdd = useCallback((dockId: DockId) => <ToolDockAdd dockId={dockId} />, [])
 
+    // Double-tap Shift opens the global search popup. It's a one-off gesture
+    // that doesn't fit the action keybinding model, so we keep the hook here.
+    useDoubleTapKey('Shift', () => search.openWith('all'), { windowMs: 350 })
+
     return (
-        <ActionContextProvider>
-            <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
-                <NewFileAction />
-                <CloseFocusedTabAction />
-                <EditorActions />
-                <LspActions />
-                <SearchActions />
-                <ActionHotkeyBridge />
-                <NativeMenuBridge />
-                <ProjectTopBar />
-                <div className='min-h-0 flex-1'>
-                    <Workspace
-                        tabRegistry={tabRegistry}
-                        renderEmpty={renderEmpty}
-                        renderToolDockAdd={renderToolDockAdd}
-                        onTabContextMenu={tabContextMenu.onTabContextMenu}
-                    />
-                </div>
-                {tabContextMenu.node}
-                <SearchPopup />
-                <LspUiOverlay />
+        <div className='bg-background text-foreground flex h-svh w-full flex-col overflow-hidden'>
+            <ProjectTopBar />
+            <div className='min-h-0 flex-1'>
+                <Workspace
+                    tabRegistry={tabRegistry}
+                    renderEmpty={renderEmpty}
+                    renderToolDockAdd={renderToolDockAdd}
+                    onTabContextMenu={tabContextMenu.onTabContextMenu}
+                />
             </div>
-        </ActionContextProvider>
+            {tabContextMenu.node}
+            <SearchPopup />
+            <LspUiOverlay />
+        </div>
     )
 }
 
@@ -180,39 +163,4 @@ function StatusScreen({ children, tone }: { children: React.ReactNode; tone?: 'm
 function formatErr(err: unknown): string {
     if (err instanceof Error) return err.message
     return String(err)
-}
-
-// Registers Cmd/Ctrl+N → new untitled text file. Reads the focused leaf
-// from `Project.layout` directly so it works for siblings of `<Workspace>`.
-function NewFileAction() {
-    const pendingSvc = usePendingFilesService()
-    const layout = useLayout()
-
-    const handler = useCallback(() => {
-        const tempId = pendingSvc.addUntitled()
-        const leaf = resolveTargetLeaf(layout.state.peek())
-        layout.addTab(
-            { kind: 'editor', leafId: leaf.id },
-            {
-                id: makeId('tab'),
-                kind: TEXT_EDITOR_KIND,
-                title: 'Untitled',
-                payload: { tempId },
-            },
-        )
-    }, [pendingSvc, layout])
-
-    const action = useMemo(
-        () => ({
-            id: 'editor.newFile',
-            title: 'New Untitled File',
-            keybinding: '$mod+n',
-            contexts: ['global'],
-            menu: { path: 'file' as const, group: 'new', order: 10 },
-            run: handler,
-        }),
-        [handler],
-    )
-    useRegisterAction(action)
-    return null
 }

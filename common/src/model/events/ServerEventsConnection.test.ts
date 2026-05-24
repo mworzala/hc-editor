@@ -2,6 +2,7 @@ import { describe, expect, test } from 'bun:test'
 
 import type { HCClient, MapEventEnvelope, MapFile } from '@hollowcube/api'
 
+import { ActionRegistry } from '../actions/ActionRegistry'
 import { ContextService } from '../context/ContextService'
 import { FileTreeService } from '../files/FileTreeService'
 import { PendingFilesService } from '../files/PendingFilesService'
@@ -38,6 +39,7 @@ function makeHarness(): Harness {
     }
     const client = {} as HCClient
     const context = new ContextService()
+    const actions = new ActionRegistry({ context })
     const fileTree = new FileTreeService({ projectId: 'p1', client })
     // Patch refresh to count calls.
     fileTree.refresh = () => {
@@ -51,7 +53,7 @@ function makeHarness(): Harness {
         fileTree,
         pendingFiles,
     })
-    const search = new SearchService()
+    const search = new SearchService({ actions })
     const lsp = new LspService({ textModels, context, search })
     return { fakes, fileTree, textModels, lsp, context, pendingFiles, search }
 }

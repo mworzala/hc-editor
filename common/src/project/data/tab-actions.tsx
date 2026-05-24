@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 
 import {
     DropdownMenu,
@@ -9,25 +9,15 @@ import {
 } from '@hollowcube/design-system'
 
 import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
-import { usePlatform } from '../../platform'
-import {
-    findFirstLeaf,
-    findLeaf,
-    type Tab,
-    type TabLocation,
-    type WorkspaceState,
-} from '../../workspace'
-import { useRegisterAction } from '../actions'
+import { findLeaf, type TabLocation, type WorkspaceState } from '../../workspace'
 
-// Host-level tab actions. Two surfaces:
+// Tab context menu (right-click on a tab). The workspace primitive surfaces
+// the click via `onTabContextMenu`; this module renders the menu and routes
+// each option to a `layout.*` call.
 //
-//   • <TabContextMenu />     — right-click menu over a tab. Wires up via the
-//                              workspace primitive's `onTabContextMenu` hook.
-//   • <CloseFocusedTabAction />  — registers Ctrl/Cmd+W (desktop only) to
-//                                  close the focused leaf's active editor tab.
-//
-// Both live in the project layer because the workspace primitive is
-// intentionally menu-agnostic — it just surfaces the right-click event.
+// `editor.closeFocusedTab` (the Cmd+W action) used to live here too; it's
+// since moved into `WorkspaceLayoutService.constructor` along with the
+// other workspace actions.
 
 type TabCtxState =
     | { open: false }
@@ -153,57 +143,4 @@ function listSiblingIds(state: WorkspaceState, loc: TabLocation): string[] {
     }
     const leaf = findLeaf(state.center, loc.leafId)
     return leaf ? leaf.tabs.map((t) => t.id) : []
-}
-
-// --- Ctrl/Cmd+W action (desktop only) ---
-
-export function CloseFocusedTabAction() {
-    const { kind: platform } = usePlatform()
-    const layout = useLayout()
-
-    const handler = useCallback(() => {
-        const state = layout.state.peek()
-        const focused = focusedLeafTab(state)
-        if (!focused) return
-        layout.closeTab({ kind: 'editor', leafId: focused.leafId }, focused.tab.id)
-    }, [layout])
-
-    const action = useMemo(
-        () => ({
-            id: 'editor.closeFocusedTab',
-            title: 'Close Tab',
-            keybinding: '$mod+w',
-            contexts: ['global'],
-            menu: { path: 'file' as const, group: 'tabs', order: 20 },
-            run: handler,
-        }),
-        [handler],
-    )
-
-    // Web browsers reserve Cmd/Ctrl+W for the tab/window close action. Only
-    // register the hotkey when running inside the desktop shell.
-    const Bridge = platform === 'desktop' ? RegisterBridge : NoopRegister
-    return <Bridge action={action} />
-}
-
-function RegisterBridge({ action }: { action: Parameters<typeof useRegisterAction>[0] }) {
-    useRegisterAction(action)
-    return null
-}
-
-function NoopRegister(_props: { action: unknown }): ReactNode {
-    return null
-}
-
-function focusedLeafTab(state: WorkspaceState): { leafId: string; tab: Tab } | null {
-    const focusedId = state.focusedLeafId
-    let leafId = focusedId
-    let leaf = focusedId ? findLeaf(state.center, focusedId) : null
-    if (!leaf) {
-        leaf = findFirstLeaf(state.center)
-        leafId = leaf.id
-    }
-    const active = leaf.tabs.find((t) => t.id === leaf!.activeId) ?? leaf.tabs[0]
-    if (!active || !leafId) return null
-    return { leafId, tab: active }
 }

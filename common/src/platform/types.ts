@@ -1,4 +1,4 @@
-import type { MenuPath } from '../project/actions/types'
+import type { MenuPath } from '../model/actions/types'
 
 export type Storage = {
     get(key: string): string | null

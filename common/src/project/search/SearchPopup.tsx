@@ -18,13 +18,11 @@ import {
     ScrollArea,
 } from '@hollowcube/design-system'
 
-import { useLanguageService, useSearchSources } from '../../model'
+import { useLanguageService, useProject, useSearchSources, useSignal } from '../../model'
 import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
 import { useProjectActionsForLayout } from '../actions/project-actions'
-import { useRunAction } from '../actions/registry'
 import { DOCS_EDITOR_KIND } from '../editors/docs-kind'
 import { isTextContentType } from '../tools/files-tree'
-import { useSearchStore } from './search-store'
 import { useActionResults } from './sources/actions'
 import { useDocsResults } from './sources/docs'
 import { useFileResults } from './sources/files'
@@ -37,13 +35,13 @@ import { type ResultGroup, type SearchResult, type SearchTab } from './types'
 // positioning className.
 
 export function SearchPopup() {
-    const open = useSearchStore((s) => s.open)
-    const close = useSearchStore((s) => s.close)
+    const search = useProject().search
+    const open = useSignal(search.popupOpen)
     return (
         <Dialog
             open={open}
             onOpenChange={(next: boolean) => {
-                if (!next) close()
+                if (!next) search.close()
             }}
         >
             <DialogPortal>
@@ -67,11 +65,12 @@ export function SearchPopup() {
 
 function SearchPopupContent() {
     const layout = useLayout()
-    const tab = useSearchStore((s) => s.tab)
-    const setTab = useSearchStore((s) => s.setTab)
-    const query = useSearchStore((s) => s.query)
-    const setQuery = useSearchStore((s) => s.setQuery)
-    const close = useSearchStore((s) => s.close)
+    const search = useProject().search
+    const tab = useSignal(search.popupTab)
+    const query = useSignal(search.popupQuery)
+    const setTab = useCallback((t: SearchTab) => search.setTab(t), [search])
+    const setQuery = useCallback((q: string) => search.setQuery(q), [search])
+    const close = useCallback(() => search.close(), [search])
 
     // Tab strip derives from the SearchService registry: 'All' is always
     // first, followed by each registered source. The 'text' tab is
@@ -354,7 +353,6 @@ function HighlightedText({ text, matches }: { text: string; matches: readonly nu
 }
 
 function resultIcon(item: SearchResult) {
-    if (item.kind === 'action' && item.icon) return item.icon
     if (item.kind === 'file') return <FileIcon />
     if (item.kind === 'symbol') return <ListTreeIcon />
     if (item.kind === 'docs') return <BookIcon />
@@ -454,7 +452,7 @@ function useActiveResult(items: readonly SearchResult[]) {
 }
 
 function useInvoke(close: () => void, layout: WorkspaceLayoutService) {
-    const runAction = useRunAction()
+    const actions = useProject().actions
     const { openEditor } = useProjectActionsForLayout(layout)
     const languageSvc = useLanguageService()
     const languageMimes = useMemo(() => languageSvc.allMimes(), [languageSvc])
@@ -462,7 +460,7 @@ function useInvoke(close: () => void, layout: WorkspaceLayoutService) {
         (result: SearchResult) => {
             switch (result.kind) {
                 case 'action': {
-                    runAction(result.data.id, { source: 'palette' })
+                    actions.run(result.data.id, { source: 'palette' })
                     close()
                     return
                 }
@@ -525,7 +523,7 @@ function useInvoke(close: () => void, layout: WorkspaceLayoutService) {
                 }
             }
         },
-        [close, openEditor, runAction, languageMimes],
+        [actions, close, openEditor, languageMimes],
     )
 }
 

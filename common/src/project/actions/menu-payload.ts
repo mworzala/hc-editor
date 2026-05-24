@@ -1,11 +1,14 @@
 // Builds the wire-format payload for the native menu bar from the current
-// action registry + context-tag set. Pure, synchronous, deterministic — the
-// React bridge wraps a JSON-equality check around the output so it only emits
-// to the host when the rendered menu would actually change.
+// enabled-actions list. Pure, synchronous, deterministic — the React bridge
+// wraps a JSON-equality check around the output so it only emits to the
+// host when the rendered menu would actually change.
+//
+// `enabledActions` is already filtered by when-clauses by `ActionRegistry`,
+// so this function doesn't re-evaluate guards; it just translates each
+// menu-tagged action to a `MenuItemPayload`.
 
+import { MENU_PATHS, type Action, type MenuPath } from '../../model/actions/types'
 import type { MenuItemPayload } from '../../platform/types'
-import { actionMatchesContext } from './context'
-import { MENU_PATHS, type Action, type ActionContextSet, type MenuPath } from './types'
 
 const DEFAULT_ORDER = 1000
 
@@ -13,10 +16,9 @@ const warnedPaths = new Set<string>()
 
 type BuildArgs = {
     actions: readonly Action[]
-    contextSet: ActionContextSet
 }
 
-export function buildMenuPayload({ actions, contextSet }: BuildArgs): readonly MenuItemPayload[] {
+export function buildMenuPayload({ actions }: BuildArgs): readonly MenuItemPayload[] {
     const out: MenuItemPayload[] = []
     for (const action of actions) {
         const menu = action.menu
@@ -30,10 +32,6 @@ export function buildMenuPayload({ actions, contextSet }: BuildArgs): readonly M
             }
             continue
         }
-        const enabled =
-            actionMatchesContext(contextSet, action.contexts) &&
-            !action.disabled &&
-            (action.when?.() ?? true)
         out.push({
             path: menu.path,
             actionId: action.id,
@@ -41,7 +39,7 @@ export function buildMenuPayload({ actions, contextSet }: BuildArgs): readonly M
             group: menu.group ?? '',
             order: menu.order ?? DEFAULT_ORDER,
             accelerator: translateKeybinding(action.keybinding),
-            enabled,
+            enabled: !action.disabled,
         })
     }
     out.sort(compareItems)
@@ -96,12 +94,8 @@ export function translateKeybinding(keybinding: string | undefined): string {
 
 function formatKeyToken(token: string): string {
     const lower = token.toLowerCase()
-    // Single-letter keys → uppercase, matches typical accelerator convention.
     if (lower.length === 1) return lower.toUpperCase()
-    // Function keys: `f1` → `F1`.
     if (/^f\d{1,2}$/u.test(lower)) return lower.toUpperCase()
-    // Named keys pass through as-is in lowercase (backspace, tab, return,
-    // enter, escape, space, delete, home, end, pageup, pagedown, arrow keys).
     return lower
 }
 

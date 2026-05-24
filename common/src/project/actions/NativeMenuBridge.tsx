@@ -1,49 +1,46 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
 
+import { useProject, useSignal } from '../../model'
 import { usePlatform } from '../../platform'
-import { useActionContextSet } from './context'
 import { buildMenuPayload } from './menu-payload'
-import { useActions, useRunAction } from './registry'
 
-// Bridges the action registry with the platform's native menu (desktop only).
+// Bridges `Project.actions.enabledActions` with the platform's native menu
+// (desktop only).
 //
 // Two responsibilities, kept in separate effects so they don't churn each
 // other:
 //
 //   1. Push the current menu payload to the host whenever the registered
 //      actions or context-tag set change. A JSON-string equality check on
-//      the previous emit skips no-op updates (common during render thrash).
+//      the previous emit skips no-op updates.
 //
 //   2. Subscribe to native-menu click events and dispatch them through the
-//      action registry's context-aware runner.
-//
-// Renders nothing — mounted once inside `<ActionRegistryProvider>` +
-// `<ActionContextProvider>` so both hooks have a source.
+//      action registry.
 
 export function NativeMenuBridge() {
     const platform = usePlatform()
-    const actions = useActions()
-    const contextSet = useActionContextSet()
-    const runAction = useRunAction()
+    const project = useProject()
+    const actionsList = useSignal(project.actions.enabledActions)
     const lastJsonRef = useRef<string>('')
+
+    const payload = useMemo(() => buildMenuPayload({ actions: actionsList }), [actionsList])
 
     useEffect(() => {
         const menu = platform.menu
         if (!menu) return
-        const items = buildMenuPayload({ actions, contextSet })
-        const next = JSON.stringify(items)
+        const next = JSON.stringify(payload)
         if (next === lastJsonRef.current) return
         lastJsonRef.current = next
-        menu.setItems(items)
-    }, [platform, actions, contextSet])
+        menu.setItems(payload)
+    }, [platform, payload])
 
     useEffect(() => {
         const menu = platform.menu
         if (!menu) return
         return menu.onInvoke((actionId) => {
-            runAction(actionId, { source: 'native-menu' })
+            project.actions.run(actionId, { source: 'native-menu' })
         })
-    }, [platform, runAction])
+    }, [platform, project])
 
     return null
 }

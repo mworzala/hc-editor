@@ -21,8 +21,7 @@ import { drawSelection, EditorView, keymap } from '@codemirror/view'
 
 import { cn } from '@hollowcube/design-system'
 
-import { ActionContextMenu } from '../project/actions/ActionContextMenu'
-import { type Action } from '../project/actions/types'
+import { ActionContextMenu, type ContextMenuAction } from '../project/actions/ActionContextMenu'
 import { UsagesPopup, type UsageMatch } from './components/UsagesPopup'
 import { activeLineHighlight } from './extensions/activeLine'
 import {
@@ -677,7 +676,7 @@ function CodeEditor({
         })
     }, [effectiveHighlightRanges])
 
-    const contextActions: Action[] = React.useMemo(() => {
+    const contextActions: ContextMenuAction[] = React.useMemo(() => {
         const cutAction = async () => {
             const view = viewRef.current
             if (!view) return

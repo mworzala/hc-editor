@@ -1,7 +1,7 @@
 import { describe, expect, spyOn, test } from 'bun:test'
 
+import { type Action } from '../../model/actions/types'
 import { buildMenuPayload, translateKeybinding } from './menu-payload'
-import { type Action, type ActionContextSet } from './types'
 
 function makeAction(overrides: Partial<Action> & { id: string }): Action {
     return {
@@ -11,15 +11,13 @@ function makeAction(overrides: Partial<Action> & { id: string }): Action {
     }
 }
 
-const GLOBAL_CTX: ActionContextSet = new Set(['global'])
-
 describe('buildMenuPayload', () => {
     test('excludes actions without a menu field', () => {
         const actions: Action[] = [
             makeAction({ id: 'a.no-menu' }),
-            makeAction({ id: 'a.in-menu', menu: { path: 'file' } }),
+            makeAction({ id: 'a.in-menu', menu: { path: 'file', group: 'g', order: 1 } }),
         ]
-        const out = buildMenuPayload({ actions, contextSet: GLOBAL_CTX })
+        const out = buildMenuPayload({ actions })
         expect(out.map((i) => i.actionId)).toEqual(['a.in-menu'])
     })
 
@@ -30,14 +28,12 @@ describe('buildMenuPayload', () => {
                 makeAction({
                     id: 'a.bogus',
                     // @ts-expect-error — intentional invalid path
-                    menu: { path: 'bogus-path-zzz' },
+                    menu: { path: 'bogus-path-zzz', group: 'g', order: 1 },
                 }),
-                makeAction({ id: 'a.ok', menu: { path: 'file' } }),
+                makeAction({ id: 'a.ok', menu: { path: 'file', group: 'g', order: 1 } }),
             ]
-            const out = buildMenuPayload({ actions, contextSet: GLOBAL_CTX })
+            const out = buildMenuPayload({ actions })
             expect(out.map((i) => i.actionId)).toEqual(['a.ok'])
-            // Bun test env exposes import.meta.env.DEV as truthy when present.
-            // Don't assert call count strictly — only assert no crash + filter.
             warn.mockRestore()
         } finally {
             warn.mockRestore()
@@ -72,7 +68,7 @@ describe('buildMenuPayload', () => {
                 menu: { path: 'edit', group: 'clip', order: 10 },
             }),
         ]
-        const out = buildMenuPayload({ actions, contextSet: GLOBAL_CTX })
+        const out = buildMenuPayload({ actions })
         expect(out.map((i) => i.actionId)).toEqual(['e', 'a', 'b', 'z', 'f'])
     })
 
@@ -82,40 +78,16 @@ describe('buildMenuPayload', () => {
             makeAction({ id: 'b', menu: { path: 'edit', group: 'x', order: 20 } }),
             makeAction({ id: 'c', menu: { path: 'edit', group: 'y', order: 10 } }),
         ]
-        const a = buildMenuPayload({ actions: base, contextSet: GLOBAL_CTX })
-        const b = buildMenuPayload({
-            actions: [base[2]!, base[0]!, base[1]!],
-            contextSet: GLOBAL_CTX,
-        })
+        const a = buildMenuPayload({ actions: base })
+        const b = buildMenuPayload({ actions: [base[2]!, base[0]!, base[1]!] })
         expect(a.map((i) => i.actionId)).toEqual(b.map((i) => i.actionId))
     })
 
-    test('enabled=true for [global] action when context set contains global', () => {
+    test('enabled=true for an action without `disabled`', () => {
         const out = buildMenuPayload({
-            actions: [
-                makeAction({
-                    id: 'g',
-                    menu: { path: 'file' },
-                    contexts: ['global'],
-                }),
-            ],
-            contextSet: GLOBAL_CTX,
+            actions: [makeAction({ id: 'g', menu: { path: 'file', group: 'g', order: 1 } })],
         })
         expect(out[0]?.enabled).toBe(true)
-    })
-
-    test('enabled=false when contexts are not satisfied', () => {
-        const out = buildMenuPayload({
-            actions: [
-                makeAction({
-                    id: 'e',
-                    menu: { path: 'edit' },
-                    contexts: ['editor:text'],
-                }),
-            ],
-            contextSet: GLOBAL_CTX, // doesn't contain editor:text
-        })
-        expect(out[0]?.enabled).toBe(false)
     })
 
     test('enabled=false when disabled: true', () => {
@@ -123,25 +95,10 @@ describe('buildMenuPayload', () => {
             actions: [
                 makeAction({
                     id: 'd',
-                    menu: { path: 'file' },
+                    menu: { path: 'file', group: 'g', order: 1 },
                     disabled: true,
                 }),
             ],
-            contextSet: GLOBAL_CTX,
-        })
-        expect(out[0]?.enabled).toBe(false)
-    })
-
-    test('enabled=false when when() returns false', () => {
-        const out = buildMenuPayload({
-            actions: [
-                makeAction({
-                    id: 'w',
-                    menu: { path: 'file' },
-                    when: () => false,
-                }),
-            ],
-            contextSet: GLOBAL_CTX,
         })
         expect(out[0]?.enabled).toBe(false)
     })
@@ -152,15 +109,14 @@ describe('buildMenuPayload', () => {
                 makeAction({
                     id: 'l1',
                     title: 'Plain title',
-                    menu: { path: 'file' },
+                    menu: { path: 'file', group: 'g', order: 1 },
                 }),
                 makeAction({
                     id: 'l2',
                     title: 'Palette label',
-                    menu: { path: 'file', label: 'Menu label' },
+                    menu: { path: 'file', group: 'g', order: 1, label: 'Menu label' },
                 }),
             ],
-            contextSet: GLOBAL_CTX,
         })
         const byId = Object.fromEntries(out.map((i) => [i.actionId, i.label]))
         expect(byId['l1']).toBe('Plain title')
@@ -172,15 +128,14 @@ describe('buildMenuPayload', () => {
             actions: [
                 makeAction({
                     id: 'k1',
-                    menu: { path: 'edit' },
+                    menu: { path: 'edit', group: 'g', order: 1 },
                     keybinding: '$mod+shift+f',
                 }),
                 makeAction({
                     id: 'k2',
-                    menu: { path: 'edit' },
+                    menu: { path: 'edit', group: 'g', order: 2 },
                 }),
             ],
-            contextSet: GLOBAL_CTX,
         })
         const byId = Object.fromEntries(out.map((i) => [i.actionId, i.accelerator]))
         expect(byId['k1']).toBe('CmdOrCtrl+Shift+F')

@@ -17,7 +17,13 @@ import {
     unfoldAll,
 } from '@codemirror/language'
 import { openSearchPanel, search } from '@codemirror/search'
-import { Compartment, EditorState, type Extension } from '@codemirror/state'
+import {
+    type ChangeSet,
+    Compartment,
+    EditorState,
+    type Extension,
+    type Text,
+} from '@codemirror/state'
 import { drawSelection, EditorView, keymap } from '@codemirror/view'
 
 import { cn } from '@hollowcube/design-system'
@@ -53,9 +59,42 @@ import { armadaDark } from './themes'
 
 void copyLineDown
 
+/** Optional controller that binds the editor to a model-owned doc.
+ *  When provided, the editor seeds itself from `initialDoc`, forwards
+ *  every local edit to `applyChanges(changes, viewOrigin)`, and applies
+ *  changes arriving via `subscribeExternal` as `userEvent: 'external'`
+ *  transactions. The `value` / `onChange` props are ignored in this mode
+ *  — content lives in the model, not in React state, so there is no
+ *  doc-replace effect that could clobber cursor/scroll. */
+export type LiveDocController = {
+    /** Doc to seed the EditorState with on mount. Called once per
+     *  mount — including remounts triggered by extension changes
+     *  (language switch, LSP client transition) so the freshly-built
+     *  view picks up the model's *current* text rather than a stale
+     *  capture from controller construction. */
+    initialDoc: () => Text | string
+    /** Forward a local edit to the model. The model updates its `Text`
+     *  and broadcasts to other attached views. */
+    applyChanges: (changes: ChangeSet, origin: symbol) => void
+    /** Subscribe to changes the model has applied from another source
+     *  (sibling view, SSE, discard, setContent). The callback receives
+     *  the ChangeSet plus its origin so the subscriber can suppress its
+     *  own echo. Returns an unsubscribe function. */
+    subscribeExternal: (cb: (changes: ChangeSet, origin: unknown) => void) => () => void
+    /** Per-mount tag so the model can identify edits this view authored
+     *  (and the view can skip applying its own echo from `subscribeExternal`). */
+    viewOrigin: symbol
+}
+
 export type CodeEditorProps = {
-    value: string
+    /** Snippet mode: static string. Ignored when `liveDoc` is set. */
+    value?: string
+    /** Snippet mode: change callback. Ignored when `liveDoc` is set. */
     onChange?: (next: string) => void
+    /** Live mode: bind to a model-owned doc. When set, the `value` /
+     *  `onChange` props are ignored and all doc state flows as
+     *  transactions — eliminating the doc-replace cursor-reset hazard. */
+    liveDoc?: LiveDocController
     /** Language definition driving syntax highlighting and the formatter. */
     language?: LanguageDefinition
     /** Extra CodeMirror extensions injected at construction time. Used to
@@ -150,6 +189,7 @@ type UsagesState = {
 function CodeEditor({
     value,
     onChange,
+    liveDoc,
     language,
     extraExtensions,
     readOnly = false,
@@ -213,12 +253,35 @@ function CodeEditor({
         onViewChangeRef.current = onViewChange
     }, [onViewChange])
 
+    // Hold the live-doc controller in a ref so swapping it (or changing
+    // its identity) doesn't tear down the EditorView. In practice a tab
+    // is either live-mode or snippet-mode for its lifetime; the ref just
+    // protects the mount effect from a useCallback identity change.
+    const liveDocRef = React.useRef(liveDoc)
+    React.useEffect(() => {
+        liveDocRef.current = liveDoc
+    }, [liveDoc])
+
     React.useEffect(() => {
         const host = hostRef.current
         if (!host) return
 
+        // Snapshot the live-doc controller at mount. The mount effect
+        // does NOT include `liveDoc` in deps — swapping controllers
+        // would rebuild the EditorView and lose state, which defeats
+        // the purpose of this mode.
+        const live = liveDocRef.current
+
         const updateListener = EditorView.updateListener.of((update) => {
-            if (update.docChanged && onChange) {
+            if (!update.docChanged) return
+            if (live) {
+                // Forward the local edit upstream. The model applies
+                // the ChangeSet to its `Text` and broadcasts to other
+                // attached views; `live.viewOrigin` lets the model
+                // and our own external-changes subscription suppress
+                // the echo back to this view.
+                live.applyChanges(update.changes, live.viewOrigin)
+            } else if (onChange) {
                 onChange(update.state.doc.toString())
             }
         })
@@ -307,13 +370,33 @@ function CodeEditor({
             )
         }
 
-        const state = EditorState.create({ doc: value, extensions })
+        // Live mode seeds from the model's *current* `Text` (the
+        // getter is invoked here, not at controller construction —
+        // matters for remounts triggered by extension changes); snippet
+        // mode uses the static `value` prop.
+        const initialDoc = live ? live.initialDoc() : (value ?? '')
+        const state = EditorState.create({ doc: initialDoc, extensions })
 
         const view = new EditorView({ state, parent: host })
         viewRef.current = view
         onViewChangeRef.current?.(view)
+
+        // Subscribe to external changes (sibling views, SSE, discard,
+        // setContent). Apply each as a CodeMirror transaction with
+        // `userEvent: 'external'` so the history extension can
+        // classify it correctly. The originator (this view) is
+        // identified by `live.viewOrigin` and skipped.
+        let unsubExternal: (() => void) | null = null
+        if (live) {
+            unsubExternal = live.subscribeExternal((changes, origin) => {
+                if (origin === live.viewOrigin) return
+                view.dispatch({ changes, userEvent: 'external' })
+            })
+        }
+
         return () => {
             onViewChangeRef.current?.(null)
+            unsubExternal?.()
             view.destroy()
             viewRef.current = null
         }
@@ -328,12 +411,18 @@ function CodeEditor({
         suppressFoldGutter,
     ])
 
+    // Snippet-mode `value` sync. In live mode the model owns the doc
+    // and pushes changes via the external-changes subscription set up
+    // in the mount effect — bypass this path entirely (a doc-replace
+    // here would wipe cursor + scroll).
     React.useEffect(() => {
+        if (liveDocRef.current) return
         const view = viewRef.current
         if (!view) return
+        const v = value ?? ''
         const current = view.state.doc.toString()
-        if (current === value) return
-        view.dispatch({ changes: { from: 0, to: current.length, insert: value } })
+        if (current === v) return
+        view.dispatch({ changes: { from: 0, to: current.length, insert: v } })
     }, [value])
 
     React.useEffect(() => {
@@ -842,7 +931,10 @@ function CodeEditor({
                         <UsagesPopup
                             ref={popupRef}
                             token={usages.token}
-                            source={value}
+                            // In live mode the React-side `value` prop
+                            // is unset (doc lives on the model); read
+                            // the current doc directly from the view.
+                            source={value ?? viewRef.current?.state.doc.toString() ?? ''}
                             matches={usages.matches}
                             anchorTop={usages.anchorTop}
                             anchorHeight={usages.anchorHeight}

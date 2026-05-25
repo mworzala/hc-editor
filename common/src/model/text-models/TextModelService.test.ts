@@ -1,9 +1,11 @@
 import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
+import { ChangeSet } from '@codemirror/state'
 
 import type { HCClient, MapFile } from '@hollowcube/api'
 
 import { FileTreeService } from '../files/FileTreeService'
 import { PendingFilesService } from '../files/PendingFilesService'
+import type { TextModelChange } from './TextModel'
 import { TextModelService } from './TextModelService'
 
 type FakeClient = {
@@ -368,6 +370,79 @@ describe('TextModelService — external changes', () => {
         // discard() — which reverts content to the model's original (the
         // original buffer 'old' since the conflict path skipped setOriginal).
         expect(m.content.peek()).toBe(m.original.peek())
+    })
+})
+
+describe('TextModelService — Text-backed doc + change stream', () => {
+    test('text signal mirrors content; both seeded from initialContent', () => {
+        const m = svc.getOrOpen('a.luau', 'hello\nworld')
+        expect(m.text.peek().toString()).toBe('hello\nworld')
+        expect(m.content.peek()).toBe('hello\nworld')
+        expect(m.text.peek().lines).toBe(2)
+    })
+
+    test('applyChanges updates text + fires change event with origin', () => {
+        const m = svc.getOrOpen('a.luau', 'hello')
+        const events: TextModelChange[] = []
+        const unsub = m.changes((e) => events.push(e))
+        const origin = Symbol('view-1')
+        const changes = ChangeSet.of([{ from: 5, insert: '!' }], 5)
+        m.applyChanges(changes, origin)
+        expect(m.content.peek()).toBe('hello!')
+        expect(m.dirty.peek()).toBe(true)
+        expect(events).toHaveLength(1)
+        expect(events[0]?.origin).toBe(origin)
+        expect(events[0]?.changes.empty).toBe(false)
+        unsub()
+    })
+
+    test('applyChanges with an empty ChangeSet is a noop (no event)', () => {
+        const m = svc.getOrOpen('a.luau', 'hello')
+        const events: TextModelChange[] = []
+        const unsub = m.changes((e) => events.push(e))
+        m.applyChanges(ChangeSet.empty(5))
+        expect(m.content.peek()).toBe('hello')
+        expect(events).toHaveLength(0)
+        unsub()
+    })
+
+    test('setContent fires a change event with origin=null', () => {
+        const m = svc.getOrOpen('a.luau', 'hello')
+        const events: TextModelChange[] = []
+        const unsub = m.changes((e) => events.push(e))
+        m.setContent('goodbye')
+        expect(m.content.peek()).toBe('goodbye')
+        expect(events).toHaveLength(1)
+        expect(events[0]?.origin).toBeNull()
+        unsub()
+    })
+
+    test('discard fires a change event reverting to original', () => {
+        const m = svc.getOrOpen('a.luau', 'original')
+        m.setContent('edited')
+        const events: TextModelChange[] = []
+        const unsub = m.changes((e) => events.push(e))
+        m.discard()
+        expect(m.content.peek()).toBe('original')
+        expect(m.dirty.peek()).toBe(false)
+        expect(events).toHaveLength(1)
+        unsub()
+    })
+
+    test('handleExternalChange routes through the change stream as a transaction', () => {
+        // Critical contract: views attached to this model dispatch
+        // received ChangeSets onto their own EditorState, which maps
+        // their selection through the changes. If the SSE handler ever
+        // regressed to a direct content-set (no ChangeSet), attached
+        // views would lose cursor/scroll on every external update.
+        const m = svc.getOrOpen('a.luau', 'old')
+        const events: TextModelChange[] = []
+        const unsub = m.changes((e) => events.push(e))
+        svc.handleExternalChange('a.luau', 'new')
+        expect(m.content.peek()).toBe('new')
+        expect(events).toHaveLength(1)
+        expect(events[0]?.origin).toBeNull()
+        unsub()
     })
 })
 

@@ -22,7 +22,7 @@ import { v1MapFilesGet, type MapFileBytes } from '@hollowcube/api'
 import type { ReadonlySignal } from '@preact/signals-core'
 import { Button, cn, Input, Label } from '@hollowcube/design-system'
 
-import { CodeEditor, type CodeEditorApi, type UsageMatch } from '../../editor'
+import { CodeEditor, type CodeEditorApi, type LiveDocController, type UsageMatch } from '../../editor'
 import {
     type DiagnosticCounts,
     type EditorServices,
@@ -65,16 +65,9 @@ export { TEXT_EDITOR_KIND }
 
 const EMPTY_EDITOR_SERVICES: EditorServices = {}
 
-// Stable empty signals so `useSignal(...)` has a real signal to subscribe
-// to before the model lands. Both peek to a falsy/empty value and never
-// notify subscribers.
-const EMPTY_STRING_SIGNAL = {
-    get value() {
-        return ''
-    },
-    peek: () => '',
-    subscribe: () => () => {},
-} as unknown as ReadonlySignal<string>
+// Stable empty signal so `useSignal(...)` has a real signal to subscribe
+// to before the model lands. Peeks to a falsy value and never notifies
+// subscribers.
 const EMPTY_BOOL_SIGNAL = {
     get value() {
         return false
@@ -379,18 +372,32 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         openedRef.current = true
     }, [docId, textModels, isExistingFile, fileFetch.kind, initialContent, effectivePath])
 
-    // Subscribe to the model's content for rendering. `useSignal` bridges
-    // the model's `content` ReadonlySignal into React state.
     const model = textModels.get(docId)
-    const content = useSignal(model ? model.content : EMPTY_STRING_SIGNAL)
+    // `dirty` is read so this component re-renders when the dirty flag
+    // flips (the workspace tab bar already subscribes via the service's
+    // signals; this keeps any local dirty-driven UI in sync too).
     const dirty = useSignal(model ? model.dirty : EMPTY_BOOL_SIGNAL)
 
-    const setContent = useCallback(
-        (next: string) => {
-            textModels.get(docId)?.setContent(next)
-        },
-        [docId, textModels],
-    )
+    // Build the live-doc controller that bridges this tab's CodeMirror
+    // view to the model's Text. The controller is stable per model
+    // identity — and CodeEditor stashes it in a ref at mount, so even
+    // an identity change here would not remount the view. Local edits
+    // flow upstream via `model.applyChanges(changes, viewOrigin)`;
+    // changes from siblings / SSE / discard arrive on `model.changes`
+    // and the controller filters out our own echo using `viewOrigin`.
+    const liveDoc = useMemo<LiveDocController | undefined>(() => {
+        if (!model) return undefined
+        const viewOrigin = Symbol(`tab:${tab.id}`)
+        return {
+            viewOrigin,
+            // Getter so remounts (language switch, LSP client flip) seed
+            // from the current Text, not the value captured here.
+            initialDoc: () => model.text.peek(),
+            applyChanges: (changes, origin) => model.applyChanges(changes, origin),
+            subscribeExternal: (cb) =>
+                model.changes((e) => cb(e.changes, e.origin)),
+        }
+    }, [model, tab.id])
 
     // Register the editor view + resolved language + save handler under this
     // tab's id so globally-bound actions (`editor.format`, `editor.save`) can
@@ -510,8 +517,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         <div className='relative flex h-full flex-col'>
             <div className='relative min-h-0 flex-1'>
                 <CodeEditor
-                    value={content}
-                    onChange={setContent}
+                    liveDoc={liveDoc}
                     language={language}
                     extraExtensions={extraExtensions}
                     onGoToDefinitionAt={goToDefinitionAt}
@@ -529,7 +535,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                     <DiagnosticIndicator
                         counts={diagnosticCounts}
                         uri={lspUri}
-                        docText={content}
+                        getDocText={() => model.content.peek()}
                         apiRef={editorApiRef}
                     />
                 ) : null}
@@ -585,12 +591,15 @@ type Severity = 1 | 2 | 3 | 4
 function DiagnosticIndicator({
     counts,
     uri,
-    docText,
+    getDocText,
     apiRef,
 }: {
     counts: DiagnosticCounts
     uri: string
-    docText: string
+    /** Lazy doc-text accessor. Called only when the user clicks a
+     *  diagnostic — avoids subscribing the indicator to every keystroke
+     *  just to compute an offset on click. */
+    getDocText: () => string
     apiRef: React.RefObject<CodeEditorApi | null>
 }) {
     const { client } = useLuauLsp()
@@ -621,11 +630,15 @@ function DiagnosticIndicator({
 
     const handleJump = useCallback(
         (d: Diagnostic) => {
-            const offset = lspPosToOffset(docText, d.range.start.line, d.range.start.character)
+            const offset = lspPosToOffset(
+                getDocText(),
+                d.range.start.line,
+                d.range.start.character,
+            )
             apiRef.current?.jumpTo(offset)
             setOpen(false)
         },
-        [apiRef, docText],
+        [apiRef, getDocText],
     )
 
     return (

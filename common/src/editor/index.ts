@@ -1,4 +1,9 @@
-export { CodeEditor, type CodeEditorProps, type CodeEditorApi } from './CodeEditor'
+export {
+    CodeEditor,
+    type CodeEditorProps,
+    type CodeEditorApi,
+    type LiveDocController,
+} from './CodeEditor'
 export { type UsageMatch } from './components/UsagesPopup'
 export { armadaDark, type EditorPalette } from './themes'
 export {

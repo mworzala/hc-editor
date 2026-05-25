@@ -210,7 +210,10 @@ export class TextModelService {
             if (!model.dirty.peek()) return { ok: true, noop: true }
         }
 
-        const snapshot = model.content.peek()
+        // Snapshot the doc as a string once for the network round-trip
+        // — read off `text` directly to avoid going through the `content`
+        // computed (saves one extra toString on the autosave hot path).
+        const snapshot = model.text.peek().toString()
         const promise = this._doSave(model, path, snapshot)
         this._inflight.set(docId, promise)
         try {
@@ -412,11 +415,15 @@ export class TextModelService {
     private _installAutosaveFor(model: TextModelInternal): void {
         const stop = effect(() => {
             // Read every signal we want to react to (auto-tracks via .value).
-            const _content = model.content.value
+            // Subscribe to `text` (not `content`) so a keystroke doesn't
+            // recompute the full string just to re-arm the debounce timer
+            // — the save call below materialises the string once, when
+            // it's actually needed.
+            const _text = model.text.value
             const dirty = model.dirty.value
             const path = model.path.value
             const orphaned = model.orphaned.value
-            void _content
+            void _text
             // Clear any pending timer so each change resets the trailing edge.
             const prev = this._autosaveTimers.get(model.id)
             if (prev) {

@@ -1,6 +1,5 @@
-import { describe, expect, test } from 'bun:test'
-
 import type { EditorView } from '@codemirror/view'
+import { describe, expect, test } from 'bun:test'
 
 import { ActiveEditorRegistry, type ActiveEditorEntry } from './ActiveEditorRegistry'
 

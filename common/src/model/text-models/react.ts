@@ -23,6 +23,8 @@ export function useAnyDirty(): boolean {
 
 const EMPTY_STRING_SIGNAL = { peek: () => '', value: '', subscribe: () => () => {} }
 
-function useSignalOrEmpty(s: { peek: () => string; value: string; subscribe: (cb: () => void) => () => void } | undefined): string {
+function useSignalOrEmpty(
+    s: { peek: () => string; value: string; subscribe: (cb: () => void) => () => void } | undefined,
+): string {
     return useSignal((s ?? EMPTY_STRING_SIGNAL) as Parameters<typeof useSignal<string>>[0])
 }

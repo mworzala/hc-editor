@@ -2,8 +2,8 @@ import { type ReactNode } from 'react'
 
 import { Button } from '@hollowcube/design-system'
 
-import { useAuth } from '../model/auth/react'
 import { IndexedDbUnavailableError } from '../model/auth/idb'
+import { useAuth } from '../model/auth/react'
 import { usePlatform } from '../platform'
 import { Launcher } from './launcher'
 

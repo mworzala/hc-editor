@@ -78,10 +78,7 @@ function TabContextMenu({
     )
 
     const loc = useMemo(() => paneIdToLocation(state.paneId), [state.paneId])
-    const siblings = useMemo(
-        () => listSiblingIds(layout.state.peek(), loc),
-        [layout, loc],
-    )
+    const siblings = useMemo(() => listSiblingIds(layout.state.peek(), loc), [layout, loc])
     const targetIdx = siblings.indexOf(state.tabId)
     const hasLeft = targetIdx > 0
     const hasRight = targetIdx !== -1 && targetIdx < siblings.length - 1

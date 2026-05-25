@@ -11,11 +11,11 @@
 import { v1MapFilesGet, type HCClient } from '@hollowcube/api'
 
 import type { Tab } from '../../workspace/types'
+import type { TextModelService } from '../text-models/TextModelService'
 import { findLeaf, selectTabLocations } from '../workspace/tree-helpers'
 import type { WorkspaceLayoutService } from '../workspace/WorkspaceLayoutService'
 import type { FileTreeService } from './FileTreeService'
 import type { PendingFilesService } from './PendingFilesService'
-import type { TextModelService } from '../text-models/TextModelService'
 
 const TEXT_EDITOR_KIND = 'editor:text'
 

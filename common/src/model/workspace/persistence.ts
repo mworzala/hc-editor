@@ -15,8 +15,8 @@
 import type { Storage } from '../../platform'
 import { STORAGE_VERSION } from '../../workspace/migrations'
 import { runMigrations } from '../../workspace/migrations'
-import { isWorkspaceState } from '../../workspace/validate'
 import type { WorkspaceState } from '../../workspace/types'
+import { isWorkspaceState } from '../../workspace/validate'
 
 type Persisted = { version: number; state: WorkspaceState }
 

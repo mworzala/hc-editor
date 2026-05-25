@@ -207,9 +207,7 @@ export class WorkspaceLayoutService {
             movedTab = d.tabs[idx] ?? null
             const tabs = d.tabs.toSpliced(idx, 1)
             const activeId =
-                d.activeId === tabId
-                    ? (tabs[Math.max(0, idx - 1)]?.id ?? null)
-                    : d.activeId
+                d.activeId === tabId ? (tabs[Math.max(0, idx - 1)]?.id ?? null) : d.activeId
             return { ...d, tabs, activeId }
         })
         if (!movedTab) return
@@ -244,9 +242,7 @@ export class WorkspaceLayoutService {
             movedTab = d.tabs[idx] ?? null
             const tabs = d.tabs.toSpliced(idx, 1)
             const activeId =
-                d.activeId === tabId
-                    ? (tabs[Math.max(0, idx - 1)]?.id ?? null)
-                    : d.activeId
+                d.activeId === tabId ? (tabs[Math.max(0, idx - 1)]?.id ?? null) : d.activeId
             return { ...d, tabs, activeId }
         })
         if (!movedTab) return

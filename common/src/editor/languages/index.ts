@@ -8,8 +8,4 @@ export {
 } from './types'
 export { jsonLanguage } from './json'
 export { luauLanguage, LUAU_LANGUAGE_ID } from './luau'
-export {
-    resolveLanguageForMime,
-    resolveLanguageForPath,
-    listAllLanguageMimes,
-} from './registry'
+export { resolveLanguageForMime, resolveLanguageForPath, listAllLanguageMimes } from './registry'

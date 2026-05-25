@@ -21,8 +21,8 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - **Read [`docs/model-architecture.md`](docs/model-architecture.md) before any phase.** It defines the conventions every service must follow.
 - **Use the [`add-service` skill](.claude/skills/add-service.md)** when scaffolding a new service. It produces the canonical structure (typed deps, signals-as-state, action registration, disposal) and runs lint + typecheck to verify.
 - **Two automated guardrails are in place:**
-  - oxlint `no-restricted-imports` bans `react` imports from `common/src/model/**` (except `react.ts` and `*.test.ts` files).
-  - `bun run lint:signals` (also chained from `bun run lint`) flags `.value` reads outside `computed`/`effect` in service files via AST walk.
+    - oxlint `no-restricted-imports` bans `react` imports from `common/src/model/**` (except `react.ts` and `*.test.ts` files).
+    - `bun run lint:signals` (also chained from `bun run lint`) flags `.value` reads outside `computed`/`effect` in service files via AST walk.
 - **Tests live with the code.** Every service ships its test file at the same time. Don't accept "we'll write tests in cleanup."
 
 ## Phases
@@ -32,6 +32,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Goal:** ship the architecture skeleton so every later phase has well-defined primitives to build on. No business logic moves yet; nothing user-visible changes.
 
 **Scope:**
+
 - Establish `common/src/model/foundation/` with: signal re-exports (`signal`, `computed`, `effect`, `batch`, `peek`, types), the `Emitter<T>` class, the `useSignal` React adapter, the typed when-clause evaluator helpers.
 - Build `ActionRegistry` class: register/unregister/run, keybinding map, when-clause evaluation against a `ContextService`, `enabledActions` derived signal.
 - Build `ContextService` class: `derive(key, fn)`, `set(key, value)`, `get(key)`, `evaluate(whenClause)`.
@@ -41,11 +42,13 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - The web/desktop entry points construct `new EditorApp(platform)` and provide it. Nothing consumes it yet; the existing React tree continues to render unchanged underneath.
 
 **Success criteria:**
+
 - `bun run lint`, `bun run typecheck`, `bun run test` all pass.
 - The new files exist with full test coverage on `ActionRegistry`, `ContextService`, `Emitter`.
 - The existing app still works exactly as it did — Phase 1 adds infrastructure, removes nothing.
 
 **Out of scope:**
+
 - Any service migration (Phases 2-5).
 - Any change to existing React components (Phase 6).
 
@@ -60,6 +63,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Why dedicated phase:** this code is load-bearing (~615 lines of store, 350 lines of tests, schema-versioned persistence with crash-loop-resistant reset). Worth isolating so regressions are easy to attribute and the test suite can be migrated alongside.
 
 **Scope:**
+
 - Build `WorkspaceLayoutService` per the canonical pattern: signals for layout state (`columnSizes`, `middleSizes`, `docks`, `center` tree, `focusedLeafId`, transient drag state), methods for every mutation (addTab, closeTab, splitLeaf, etc.), persistence via debounced effect against `Storage`.
 - Migrate the schema-versioned read/migrate/validate path verbatim from [`common/src/workspace/store.ts`](common/src/workspace/store.ts) — don't redesign persistence in this phase.
 - Migrate every test from [`store.test.ts`](common/src/workspace/store.test.ts) to test the new service; preserve coverage parity.
@@ -68,6 +72,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Drop the existing Zustand store, the `useWorkspaceStore` hook, and the `WorkspaceContext`.
 
 **Success criteria:**
+
 - Layout state persists across reload, identical key (`hc-project:<projectId>`).
 - All existing workspace tests pass against the new service.
 - Drag-and-drop, splits, dock toggles all work in the browser (verify via preview).
@@ -82,6 +87,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Goal:** build the services that own project data, and remove TanStack Query in the same cut. These services own their fetching and caching directly.
 
 **Scope:**
+
 - Build the canonical `TextModelService` + `TextModel` per the [spec in the architecture doc](docs/model-architecture.md#canonical-example-textmodelservice). This is the template — get it right because subsequent services follow the same shape.
 - Build `FileTreeService`: file metadata as a flat map, derived tree signal, mutations (create/rename/delete/move), reacts to events (Phase 4 hooks up SSE).
 - Build `PendingFilesService`: untitled-file tracking.
@@ -94,6 +100,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Auto-save debounce migrates from the React effect into `TextModelService` (per the spec).
 
 **Success criteria:**
+
 - All file operations work in the browser (open, edit, save, autosave, rename, delete, multi-tab).
 - No `@tanstack/*` imports anywhere in the codebase.
 - New services have full test coverage.
@@ -108,6 +115,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Goal:** migrate the heavy services that own external resources (workers, SSE, indexes).
 
 **Scope:**
+
 - `LspService`: owns the Luau LSP worker (terminate on dispose), per-URI diagnostics signals, completions/hover/definitions caches. The most complex service — needs careful lifecycle. Derived signals: `errorCountByPath` (used by file tree for badges).
 - `EngineApiService`: owns the Luau engine API bundle. Methods: `lookup(name)`, `search(query)`.
 - `ServerEventsConnection`: owns the SSE `EventSource`. Dispatches to siblings via callbacks injected at construction (`onFileChanged: path => fileTree.refresh(path)`). The cross-service dispatch boundary is here.
@@ -117,6 +125,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Delete the existing `LuauLspProvider`, `EngineApiProvider`, `ProjectEventsProvider`, `LanguageProvider` React contexts.
 
 **Success criteria:**
+
 - LSP diagnostics, completions, hover, goto-definition all work as before.
 - SSE updates (someone edits a file via the API) reflect in the open editor and file tree.
 - Search popup returns results from every registered source.
@@ -131,6 +140,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Goal:** lift `AuthProvider` into an `AuthService` class. Deferred to here because auth already works and is mostly factored out (`TokenManager`, `createIndexedDbSessionStore`, `redeemLaunchCode` are plain TS); the React wrapping is contained.
 
 **Scope:**
+
 - Build `AuthService` class. Owns: auth state machine (`initializing → redeeming → picking → authenticated → error`) as signals, sessions, active account, granted project, `TokenManager`, DPoP plumbing, dev-dummy-auth short-circuits.
 - Service lives on `EditorApp` (added to the container's fields).
 - New `<AuthProvider>` is a ~30-line bridge: holds the service via `useRef`, calls `service.init()` once, exposes `useAuth()` via `useSyncExternalStore`.
@@ -138,6 +148,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - Migrate auth tests to test the service directly. Existing `tokens.test.ts`, `dpop.test.ts`, `redeem.test.ts` already test plain TS — they survive untouched.
 
 **Success criteria:**
+
 - Auth flows work end-to-end: launch from in-game, refresh tokens, switch accounts, sign out, dev-dummy mode.
 - The 318-line `context.tsx` shrinks to ~50 lines (bridge + provider).
 - Auth tests pass.
@@ -151,6 +162,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Goal:** collapse the provider tower, move all action handlers into services, migrate every remaining component to the new hooks. This is the phase that visibly delivers the simpler architecture.
 
 **Scope:**
+
 - Audit every component under `common/src/project/` and `common/src/workspace/` for action handlers, direct state manipulation, and React context reads. Route mutations through `actions.run(...)`. Move handler logic into the relevant service.
 - Rewrite [`ProjectWorkspace.tsx`](common/src/project/ProjectWorkspace.tsx) to a ~3-deep provider tree: `<ProjectErrorBoundary>` → `<TooltipProvider>` → `<ProjectProvider>` → workspace. No more nested provider tower.
 - Update page shells ([`web/src/pages/index.tsx`](web/src/pages/index.tsx), [`desktop/frontend/src/pages/project/[projectId].tsx`](desktop/frontend/src/pages/project/[projectId].tsx)) to construct `Project` via `app.openProject(projectId)` in a `useEffect`, dispose in cleanup. Wire `app.closeProject()` on unmount.
@@ -160,6 +172,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 - The native menu bridge and hotkey bridge consume `actions.enabledActions` (a derived signal) instead of subscribing to a React-side registry.
 
 **Success criteria:**
+
 - `ProjectWorkspace` is ~30 lines of JSX (down from ~120 today).
 - No React component reads from a model-layer context other than `<AppProvider>` / `<ProjectProvider>`.
 - All actions registered in services, no `useRegisterAction` calls in components.
@@ -174,6 +187,7 @@ This document is the high-level migration roadmap. Each phase is sized to be a s
 **Goal:** delete the rubble, update docs, drop unused deps.
 
 **Scope:**
+
 - Delete every now-orphaned React context file: `WorkspaceContext`, the old `DocumentStoreProvider`, `PendingFilesProvider`, `RegistryProvider`, `LuauLspProvider`, `EngineApiProvider`, `LanguageProvider`, `ProjectEventsProvider`, `ProjectServicesProvider`, `ProjectGate`, `HCClientProvider`, and any hooks they exposed.
 - Delete the old `common/src/workspace/store.ts` (Zustand). Drop `zustand` from `package.json` if no other consumer remains.
 - Delete `common/src/project/actions/` legacy class once `ActionRegistry` (foundation) supersedes it; same for any other duplicated primitives.

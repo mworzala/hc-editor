@@ -3,10 +3,10 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import type { HCClient, MapFile } from '@hollowcube/api'
 
 import { makeTestCollaborators } from '../test-helpers'
+import { TextModelService } from '../text-models/TextModelService'
 import { FileOperationsService } from './FileOperationsService'
 import { FileTreeService } from './FileTreeService'
 import { PendingFilesService } from './PendingFilesService'
-import { TextModelService } from '../text-models/TextModelService'
 
 function mapFile(path: string, size = 1): MapFile {
     return { path, contentType: 'text/plain', size, hash: 'h' }
@@ -39,7 +39,9 @@ function makeFakeClient(): FakeClient {
                     state.nextPutError = null
                     return Promise.reject(e)
                 }
-                return Promise.resolve(mapFile(filePath, String(opts?.body ?? '').length) as unknown)
+                return Promise.resolve(
+                    mapFile(filePath, String(opts?.body ?? '').length) as unknown,
+                )
             }
             return Promise.resolve(undefined as unknown)
         },
@@ -126,7 +128,6 @@ afterEach(() => {
     pendingFiles.dispose()
     collaborators.dispose()
 })
-
 
 describe('FileOperationsService — move (pending)', () => {
     test('pending source: just reassigns the path on the pending entry', async () => {

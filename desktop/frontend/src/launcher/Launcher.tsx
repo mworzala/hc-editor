@@ -1,7 +1,6 @@
 import { useCallback, useState } from 'react'
 
 import { OpenProject } from '../../bindings/changeme/windowmanager'
-
 import { ProjectList } from './ProjectList'
 import type { LauncherProject } from './projects'
 import { useProjects } from './useProjects'
@@ -40,11 +39,7 @@ export function Launcher() {
                 className='min-h-0 flex-1 overflow-y-auto px-3 pb-6'
                 style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
             >
-                <ProjectList
-                    projects={projects}
-                    onOpen={handleOpen}
-                    disabled={opening !== null}
-                />
+                <ProjectList projects={projects} onOpen={handleOpen} disabled={opening !== null} />
             </main>
         </div>
     )

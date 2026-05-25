@@ -45,7 +45,11 @@ function makeFakeClient(): FakeClient {
             if (!pending) throw new Error('bootstrap not armed')
             const p = pending
             // Reject if the caller aborts.
-            opts?.signal?.addEventListener('abort', () => p.reject(new DOMException('aborted', 'AbortError')), { once: true })
+            opts?.signal?.addEventListener(
+                'abort',
+                () => p.reject(new DOMException('aborted', 'AbortError')),
+                { once: true },
+            )
             return p.promise
         },
     } as unknown as HCClient

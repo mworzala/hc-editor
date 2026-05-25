@@ -11,8 +11,8 @@ import {
     cn,
 } from '@hollowcube/design-system'
 
-import { useActiveDialog } from '../model/dialogs/react'
 import type { SavePathDialogState } from '../model/dialogs/DialogService'
+import { useActiveDialog } from '../model/dialogs/react'
 
 // Renders the active `DialogService` state as a modal dialog. One per
 // project; mounted alongside the rest of the project chrome.
@@ -76,7 +76,11 @@ function SavePathDialog({ state }: { state: SavePathDialogState }) {
                         <Button size='sm' variant='ghost' onClick={() => state.cancel()}>
                             Cancel
                         </Button>
-                        <Button size='sm' disabled={!trimmed} onClick={() => state.confirm(trimmed)}>
+                        <Button
+                            size='sm'
+                            disabled={!trimmed}
+                            onClick={() => state.confirm(trimmed)}
+                        >
                             Save
                         </Button>
                     </div>

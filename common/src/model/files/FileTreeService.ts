@@ -22,7 +22,13 @@ export interface FileTreeServiceDeps {
 
 export type RenameResult =
     | { ok: true; file: MapFile }
-    | { ok: false; error: { kind: 'exists' } | { kind: 'write'; cause: unknown } | { kind: 'read'; cause: unknown } }
+    | {
+          ok: false
+          error:
+              | { kind: 'exists' }
+              | { kind: 'write'; cause: unknown }
+              | { kind: 'read'; cause: unknown }
+      }
 
 export type DeleteResult = { ok: true } | { ok: false; error: { kind: 'network'; cause: unknown } }
 
@@ -94,14 +100,22 @@ export class FileTreeService {
     ): Promise<RenameResult> {
         if (oldPath === newPath) {
             const existing = this._byPath.peek().get(oldPath)
-            return existing ? { ok: true, file: existing } : { ok: false, error: { kind: 'read', cause: new Error('missing') } }
+            return existing
+                ? { ok: true, file: existing }
+                : { ok: false, error: { kind: 'read', cause: new Error('missing') } }
         }
         if (this._byPath.peek().has(newPath)) {
             return { ok: false, error: { kind: 'exists' } }
         }
         let file: MapFile
         try {
-            file = await v1MapFilesUpdate(this.deps.client, this.deps.projectId, newPath, body, contentType)
+            file = await v1MapFilesUpdate(
+                this.deps.client,
+                this.deps.projectId,
+                newPath,
+                body,
+                contentType,
+            )
         } catch (cause) {
             return { ok: false, error: { kind: 'write', cause } }
         }

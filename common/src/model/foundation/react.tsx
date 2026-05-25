@@ -12,10 +12,9 @@
 
 import { createContext, useContext, useSyncExternalStore, type ReactNode } from 'react'
 
-import type { ReadonlySignal } from './signal'
-
 import type { EditorApp } from '../EditorApp'
 import type { Project } from '../Project'
+import type { ReadonlySignal } from './signal'
 
 const AppContext = createContext<EditorApp | null>(null)
 

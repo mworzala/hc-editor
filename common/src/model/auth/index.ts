@@ -15,16 +15,7 @@ export {
 export { createWebCryptoKeyStore, type ClientKeyStore } from './keystore'
 export { createHashLaunchCodeSource } from './launch-code'
 export { redeemLaunchCode, type RedeemDeps, type RedeemOutcome } from './redeem'
-export {
-    createIndexedDbSessionStore,
-    createMemorySessionStore,
-} from './sessionstore'
+export { createIndexedDbSessionStore, createMemorySessionStore } from './sessionstore'
 export { createTokenManager, type TokenManager, type TokenManagerDeps } from './tokens'
-export type {
-    AuthStatus,
-    Session,
-    SessionAuthState,
-    SessionStore,
-    StoredSession,
-} from './types'
+export type { AuthStatus, Session, SessionAuthState, SessionStore, StoredSession } from './types'
 export { IndexedDbUnavailableError } from './idb'

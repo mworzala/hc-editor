@@ -3,7 +3,9 @@ import { describe, expect, test } from 'bun:test'
 import type { LanguageDefinition } from '../../editor/languages/types'
 import { LanguageService } from './LanguageService'
 
-function fakeLang(over: Partial<LanguageDefinition> & Pick<LanguageDefinition, 'id'>): LanguageDefinition {
+function fakeLang(
+    over: Partial<LanguageDefinition> & Pick<LanguageDefinition, 'id'>,
+): LanguageDefinition {
     return {
         mimeTypes: [],
         extensions: [],

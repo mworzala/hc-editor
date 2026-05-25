@@ -48,9 +48,7 @@ type FocusedDoc = {
 function StructurePane() {
     const layout = useLayout()
     const { client, status } = useLuauLsp()
-    const [focused, setFocused] = useState<FocusedDoc | null>(() =>
-        readFocus(layout.state.peek()),
-    )
+    const [focused, setFocused] = useState<FocusedDoc | null>(() => readFocus(layout.state.peek()))
 
     // Track focused-leaf changes by subscribing to the layout state signal.
     useEffect(() => {

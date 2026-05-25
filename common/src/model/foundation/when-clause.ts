@@ -35,7 +35,9 @@ export class WhenClauseParseError extends Error {
         readonly column: number,
         readonly source: string,
     ) {
-        super(`when-clause parse error at column ${column}: ${message}\n  ${source}\n  ${' '.repeat(column)}^`)
+        super(
+            `when-clause parse error at column ${column}: ${message}\n  ${source}\n  ${' '.repeat(column)}^`,
+        )
         this.name = 'WhenClauseParseError'
     }
 }
@@ -97,7 +99,11 @@ function tokenize(src: string): Token[] {
                 i++
             }
             if (i >= src.length) {
-                throw new WhenClauseParseError(`unterminated string starting at column ${start}`, start, src)
+                throw new WhenClauseParseError(
+                    `unterminated string starting at column ${start}`,
+                    start,
+                    src,
+                )
             }
             i++
             tokens.push({ kind: 'string', text: value, column: start })
@@ -128,7 +134,11 @@ class Parser {
         const ast = this.parseOr()
         const tok = this.peek()
         if (tok.kind !== 'eof') {
-            throw new WhenClauseParseError(`unexpected token after expression`, tok.column, this.src)
+            throw new WhenClauseParseError(
+                `unexpected token after expression`,
+                tok.column,
+                this.src,
+            )
         }
         return ast
     }

@@ -94,7 +94,9 @@ describe('EngineApiService — state machine', () => {
         const svc = new EngineApiService({
             load: () => {
                 attempt++
-                return attempt === 1 ? Promise.reject(new Error('boom')) : Promise.resolve(makeBundle())
+                return attempt === 1
+                    ? Promise.reject(new Error('boom'))
+                    : Promise.resolve(makeBundle())
             },
         })
         const orig = console.error

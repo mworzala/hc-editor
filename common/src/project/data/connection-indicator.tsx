@@ -65,7 +65,10 @@ export function ConnectionIndicator({ desktop }: ConnectionIndicatorProps) {
                 </PopoverHeader>
                 <div className='flex flex-col gap-2 text-xs'>
                     <Row label='Last event id' value={lastEventId ?? '—'} mono />
-                    <Row label='Last event' value={<RelativeTime at={lastEventAt ?? undefined} />} />
+                    <Row
+                        label='Last event'
+                        value={<RelativeTime at={lastEventAt ?? undefined} />}
+                    />
                     {error ? <ErrorRow error={error} /> : null}
                 </div>
                 {status === 'error' ? (

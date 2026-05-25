@@ -42,9 +42,9 @@ import {
     useLuauLsp,
     useProject,
 } from '../../model'
-import { useNotificationService } from '../../model/notifications'
 import { usePendingFile } from '../../model/files'
 import { useSignal } from '../../model/foundation/react'
+import { useNotificationService } from '../../model/notifications'
 import { useLayout } from '../../model/workspace'
 import { type Tab } from '../../workspace'
 import { useProjectActions } from '../actions'
@@ -727,4 +727,3 @@ function useDiagnosticsForUri(_client: unknown, uri: string | null): readonly Di
     // hook reads from `Project.lsp.diagnosticsForUri(uri)`.
     return modelUseDiagnosticsForUri(uri)
 }
-

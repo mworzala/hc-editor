@@ -22,16 +22,12 @@ const router = createHashRouter(routes)
 //   VITE_DEV_AUTH_USER        — stamp this id as `x-auth-user` on every
 //                               request (pairs with the backend's
 //                               auth-disabled mode)
-const devApiUrl = import.meta.env.DEV
-    ? (import.meta.env.VITE_DEV_API_URL?.trim() ?? '')
-    : ''
+const devApiUrl = import.meta.env.DEV ? (import.meta.env.VITE_DEV_API_URL?.trim() ?? '') : ''
 const devMapIdOverride = import.meta.env.DEV
     ? (import.meta.env.VITE_DEV_EDITOR_MAP_ID?.trim() ?? '')
     : ''
 const devDummyAuth = import.meta.env.DEV && import.meta.env.VITE_DEV_DUMMY_AUTH === 'true'
-const devAuthUser = import.meta.env.DEV
-    ? (import.meta.env.VITE_DEV_AUTH_USER?.trim() ?? '')
-    : ''
+const devAuthUser = import.meta.env.DEV ? (import.meta.env.VITE_DEV_AUTH_USER?.trim() ?? '') : ''
 
 const platform = {
     kind: 'desktop' as const,

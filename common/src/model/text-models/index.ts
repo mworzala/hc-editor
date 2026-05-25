@@ -11,9 +11,4 @@ export {
     type TextModel,
     type TextModelInternal,
 } from './TextModel'
-export {
-    useAnyDirty,
-    useTextModel,
-    useTextModelContent,
-    useTextModels,
-} from './react'
+export { useAnyDirty, useTextModel, useTextModelContent, useTextModels } from './react'

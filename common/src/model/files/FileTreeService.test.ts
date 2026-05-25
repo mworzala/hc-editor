@@ -59,7 +59,10 @@ function makeFakeClient(): FakeClient {
                     state.nextDeleteError = null
                     return Promise.reject(e)
                 }
-                return Promise.resolve({ status: 204, headers: new Headers() } as unknown as Response)
+                return Promise.resolve({
+                    status: 204,
+                    headers: new Headers(),
+                } as unknown as Response)
             }
             return Promise.resolve(undefined as unknown as Response)
         },

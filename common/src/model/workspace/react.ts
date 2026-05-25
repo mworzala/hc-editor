@@ -15,7 +15,6 @@
 
 import { useProject } from '../foundation/react'
 import { useSignal } from '../foundation/react'
-
 import type { WorkspaceLayoutService } from './WorkspaceLayoutService'
 
 export function useLayout(): WorkspaceLayoutService {

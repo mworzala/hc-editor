@@ -60,12 +60,13 @@ const count = signal(0)
 const doubled = computed(() => count.value * 2)
 const dispose = effect(() => console.log('doubled:', doubled.value))
 
-count.value = 1                     // logs "doubled: 2"
-batch(() => {                       // batch: subscribers fire once
+count.value = 1 // logs "doubled: 2"
+batch(() => {
+    // batch: subscribers fire once
     count.value = 2
     count.value = 3
-})                                  // logs "doubled: 6"
-dispose()                           // stop the effect
+}) // logs "doubled: 6"
+dispose() // stop the effect
 ```
 
 **Two reading idioms:**
@@ -88,7 +89,9 @@ export class Emitter<T> {
 
     event: Event<T> = (listener) => {
         this.listeners.add(listener)
-        return () => { this.listeners.delete(listener) }
+        return () => {
+            this.listeners.delete(listener)
+        }
     }
 
     fire(value: T): void {
@@ -106,7 +109,7 @@ Services expose events as the `event` field, never the `Emitter` itself:
 ```ts
 class TextModelService {
     private _events = new Emitter<TextModelServiceEvent>()
-    readonly events = this._events.event   // subscribe; cannot fire from outside
+    readonly events = this._events.event // subscribe; cannot fire from outside
 }
 ```
 
@@ -234,7 +237,7 @@ The service stores `TextModelInternal` in its private map and exposes `TextModel
 ```ts
 class FooService {
     private _state = signal<State>(initial)
-    readonly state: ReadonlySignal<State> = this._state   // consumer-facing
+    readonly state: ReadonlySignal<State> = this._state // consumer-facing
 }
 ```
 
@@ -258,13 +261,13 @@ Consumers can `.value` (read), `effect`/`computed` over it, subscribe — but ca
 
 This matters enough to spell out:
 
-| Context | Use | Why |
-|---|---|---|
-| Inside `computed(() => ...)` | `.value` | You want to register a dependency |
-| Inside `effect(() => ...)` | `.value` | Same — effect re-runs when these change |
-| Inside an imperative method (`save`, `setContent`, action handlers) | `.peek()` | You're reading state, not subscribing. Subscribing here causes the surrounding tracking context (often nothing, sometimes a parent effect) to inadvertently track |
-| Inside a React component's render function | via the `useSignal` hook | Hook bridges to `useSyncExternalStore` |
-| Inside a React `useEffect` callback | `.peek()` | The React effect manages its own dependencies via the dep array |
+| Context                                                             | Use                      | Why                                                                                                                                                               |
+| ------------------------------------------------------------------- | ------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inside `computed(() => ...)`                                        | `.value`                 | You want to register a dependency                                                                                                                                 |
+| Inside `effect(() => ...)`                                          | `.value`                 | Same — effect re-runs when these change                                                                                                                           |
+| Inside an imperative method (`save`, `setContent`, action handlers) | `.peek()`                | You're reading state, not subscribing. Subscribing here causes the surrounding tracking context (often nothing, sometimes a parent effect) to inadvertently track |
+| Inside a React component's render function                          | via the `useSignal` hook | Hook bridges to `useSyncExternalStore`                                                                                                                            |
+| Inside a React `useEffect` callback                                 | `.peek()`                | The React effect manages its own dependencies via the dep array                                                                                                   |
 
 A future lint rule will enforce this (see [Reinforcement mechanisms](#reinforcement-mechanisms)). Until then it's a convention worth catching in code review.
 
@@ -388,21 +391,21 @@ Components do not call service methods directly for mutations. They go through a
 
 ```ts
 export type Action = {
-    id: string                              // unique, dotted: 'editor.save'
-    title: string                           // human-readable
-    keybinding?: string                     // '$mod+s', '$mod+shift+p'
-    when?: string                           // 'editor.text && editor.dirty'
+    id: string // unique, dotted: 'editor.save'
+    title: string // human-readable
+    keybinding?: string // '$mod+s', '$mod+shift+p'
+    when?: string // 'editor.text && editor.dirty'
     menu?: { path: MenuPath; group: string; order: number }
     run(args?: Record<string, unknown>): void | Promise<void>
 }
 
 export class ActionRegistry {
-    register(action: Action): () => void    // returns dispose
+    register(action: Action): () => void // returns dispose
     unregister(id: string): void
     run(id: string, args?: Record<string, unknown>): void | Promise<void>
     get(id: string): Action | undefined
     list(): readonly Action[]
-    enabledActions: ReadonlySignal<readonly Action[]>   // computed: filtered by current context
+    enabledActions: ReadonlySignal<readonly Action[]> // computed: filtered by current context
 }
 ```
 
@@ -435,31 +438,31 @@ Most context keys are `derive` — pure functions of other signals. A few are `s
 
 App-level (one per process):
 
-| Service | Owns | Notes |
-|---|---|---|
-| `EditorApp` | `HCClient`, `AuthService`, the current `Project | null`, `platform` | `openProject(id)` / `closeProject()`. Owns the HTTP client across project switches |
+| Service       | Owns                                                                                         | Notes                                                                                           |
+| ------------- | -------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `EditorApp`   | `HCClient`, `AuthService`, the current `Project                                              | null`, `platform`                                                                               | `openProject(id)` / `closeProject()`. Owns the HTTP client across project switches |
 | `AuthService` | Auth state machine, sessions, active account, granted project, `TokenManager`, DPoP plumbing | Subsumes today's `AuthProvider` + `tokens.ts` + `redeem.ts` + `sessionstore.ts` + `keystore.ts` |
-| `HCClient` | HTTP client | Existing class. Auth interceptors read from `AuthService` |
+| `HCClient`    | HTTP client                                                                                  | Existing class. Auth interceptors read from `AuthService`                                       |
 
 Project-level (one per open project, disposed on close):
 
-| Service | Owns | Notes |
-|---|---|---|
-| `Project` | Container of services below | `dispose()` tears down in reverse order |
-| `ProjectBootstrap` | Project metadata fetch state | Signals: `status`, `project` |
-| `FileTreeService` | File metadata as flat map; tree-shape derived | Methods: `create`, `rename`, `delete`, `move`. Reacts to SSE events |
-| `TextModelService` | Open `TextModel` instances, autosave coordinator, save mutation tracker | Canonical example below |
-| `TextModel` (per doc) | `content`, `original`, `dirty`, `path` | Multi-tab share via service refcount |
-| `PendingFilesService` | Untitled files awaiting save | Signals: `pending` |
-| `WorkspaceLayoutService` | Workspace primitive state (docks, splits, tabs, focus) | Persists to `Storage` via `hc-project:<id>` |
-| `ContextService` | Context keys for action when-clauses | Mix of derived signals and imperative sets |
-| `ActionRegistry` | Action definitions, keybindings, menu structure | The universal command bus |
-| `LanguageService` | Language registry, mime/path → language lookup | Mostly static, lazy module loads |
-| `LspService` | LSP worker, per-URI diagnostics, completions cache, definitions index | Signals: `status`, `diagnosticsForUri(uri)`, derived `errorCountByPath` |
-| `EngineApiService` | Luau engine API bundle for autocomplete docs | Signals: `bundleStatus` |
-| `SearchService` | Pluggable search source registry | Each domain service registers its source |
-| `ServerEventsConnection` | SSE connection | Dispatches into siblings via injected callbacks |
-| `ActiveEditorRegistry` | Tracks focused CodeMirror `EditorView` | The one place view-state registers back into the model layer |
+| Service                  | Owns                                                                    | Notes                                                                   |
+| ------------------------ | ----------------------------------------------------------------------- | ----------------------------------------------------------------------- |
+| `Project`                | Container of services below                                             | `dispose()` tears down in reverse order                                 |
+| `ProjectBootstrap`       | Project metadata fetch state                                            | Signals: `status`, `project`                                            |
+| `FileTreeService`        | File metadata as flat map; tree-shape derived                           | Methods: `create`, `rename`, `delete`, `move`. Reacts to SSE events     |
+| `TextModelService`       | Open `TextModel` instances, autosave coordinator, save mutation tracker | Canonical example below                                                 |
+| `TextModel` (per doc)    | `content`, `original`, `dirty`, `path`                                  | Multi-tab share via service refcount                                    |
+| `PendingFilesService`    | Untitled files awaiting save                                            | Signals: `pending`                                                      |
+| `WorkspaceLayoutService` | Workspace primitive state (docks, splits, tabs, focus)                  | Persists to `Storage` via `hc-project:<id>`                             |
+| `ContextService`         | Context keys for action when-clauses                                    | Mix of derived signals and imperative sets                              |
+| `ActionRegistry`         | Action definitions, keybindings, menu structure                         | The universal command bus                                               |
+| `LanguageService`        | Language registry, mime/path → language lookup                          | Mostly static, lazy module loads                                        |
+| `LspService`             | LSP worker, per-URI diagnostics, completions cache, definitions index   | Signals: `status`, `diagnosticsForUri(uri)`, derived `errorCountByPath` |
+| `EngineApiService`       | Luau engine API bundle for autocomplete docs                            | Signals: `bundleStatus`                                                 |
+| `SearchService`          | Pluggable search source registry                                        | Each domain service registers its source                                |
+| `ServerEventsConnection` | SSE connection                                                          | Dispatches into siblings via injected callbacks                         |
+| `ActiveEditorRegistry`   | Tracks focused CodeMirror `EditorView`                                  | The one place view-state registers back into the model layer            |
 
 That's the universe. Most services are 100-300 lines.
 
@@ -469,12 +472,12 @@ That's the universe. Most services are 100-300 lines.
 
 This question comes up enough to spell out:
 
-| Layer | Owns | Examples |
-|---|---|---|
-| `TextModel` (model, per document) | Content, original, dirty | `content: ReadonlySignal<string>`, `dirty: ReadonlySignal<boolean>` |
-| `LspService` (model, per project) | Diagnostics by URI, completions, hover, definitions, worker | `diagnosticsForUri(uri): ReadonlySignal<readonly Diagnostic[]>` |
-| `FileTreeService` (model) | Per-file derived diagnostic counts | `errorCountByPath: ReadonlySignal<ReadonlyMap<string, number>>` (computed from `LspService`) |
-| CodeMirror `EditorView` (view, per mounted editor) | Cursor, selection, scroll, folds, decorations, popups | View state. Lives in CodeMirror, not in our services |
+| Layer                                              | Owns                                                        | Examples                                                                                     |
+| -------------------------------------------------- | ----------------------------------------------------------- | -------------------------------------------------------------------------------------------- |
+| `TextModel` (model, per document)                  | Content, original, dirty                                    | `content: ReadonlySignal<string>`, `dirty: ReadonlySignal<boolean>`                          |
+| `LspService` (model, per project)                  | Diagnostics by URI, completions, hover, definitions, worker | `diagnosticsForUri(uri): ReadonlySignal<readonly Diagnostic[]>`                              |
+| `FileTreeService` (model)                          | Per-file derived diagnostic counts                          | `errorCountByPath: ReadonlySignal<ReadonlyMap<string, number>>` (computed from `LspService`) |
+| CodeMirror `EditorView` (view, per mounted editor) | Cursor, selection, scroll, folds, decorations, popups       | View state. Lives in CodeMirror, not in our services                                         |
 
 Two tabs of the same file share one `TextModel` (content) and have two independent `EditorView`s (cursors, scroll).
 
@@ -497,11 +500,11 @@ The file tree row re-renders only when the count for its path changes (fine-grai
 function TextEditor({ docId, lspUri }: Props) {
     const { textModels, lsp } = useProject()
     const model = textModels.getOrOpen(docId, /* initialContent from fetch */ '')
-    
+
     return (
         <CodeMirrorHost
             initialContent={model.content.peek()}
-            contentSignal={model.content}             // model → view (external edits)
+            contentSignal={model.content} // model → view (external edits)
             onChange={(text) => model.setContent(text)} // view → model
             diagnosticsSignal={lsp.diagnosticsForUri(lspUri)}
             lspCapabilities={lsp.capabilitiesFor(lspUri)}
@@ -528,9 +531,7 @@ This service is the template. New services should follow the same skeleton.
 ```ts
 export type DocumentId = string
 
-export type SaveResult =
-    | { ok: true; noop?: boolean }
-    | { ok: false; error: SaveError }
+export type SaveResult = { ok: true; noop?: boolean } | { ok: false; error: SaveError }
 
 export type SaveError =
     | { kind: 'requires-path' }
@@ -543,7 +544,7 @@ export interface TextModel {
     readonly path: ReadonlySignal<string | null>
     readonly content: ReadonlySignal<string>
     readonly original: ReadonlySignal<string>
-    readonly dirty: ReadonlySignal<boolean>     // computed
+    readonly dirty: ReadonlySignal<boolean> // computed
     readonly orphaned: ReadonlySignal<boolean>
     setContent(content: string): void
     discard(): void
@@ -711,7 +712,7 @@ private _registerActions(): void {
 
 ### Context key derivations
 
-Editor-state derivations (`editor.focused`, `editor.text`, `editor.dirty`, `editor.anyDirty`) are owned centrally by `Project.ts` so they can read from the focus signal *and* the dirty signal in one place. Service-local context keys (e.g. `lsp.luau.running` inside `LspService`) live with the service that owns the source signal. Both are equally valid — pick whichever puts the derivation next to the data it depends on.
+Editor-state derivations (`editor.focused`, `editor.text`, `editor.dirty`, `editor.anyDirty`) are owned centrally by `Project.ts` so they can read from the focus signal _and_ the dirty signal in one place. Service-local context keys (e.g. `lsp.luau.running` inside `LspService`) live with the service that owns the source signal. Both are equally valid — pick whichever puts the derivation next to the data it depends on.
 
 ```ts
 // In Project.ts
@@ -738,7 +739,7 @@ useEffect(() => {
         if (!project) return
         if (project.textModels.anyDirty.peek()) {
             e.preventDefault()
-            e.returnValue = ''   // legacy Chrome
+            e.returnValue = '' // legacy Chrome
         }
     }
     window.addEventListener('beforeunload', handler)
@@ -794,7 +795,7 @@ Patterns that look right but aren't.
 
 ```ts
 // common/src/model/text-models/TextModelService.ts
-import { useEffect } from 'react'   // ✗ no
+import { useEffect } from 'react' // ✗ no
 ```
 
 Services are React-free. If you need a hook, it goes in `react.ts`. If you need to do something on a lifecycle event, the service has `constructor` and `dispose()`.
@@ -815,7 +816,7 @@ Use `.peek()` in methods. `.value` is only for `computed` and `effect`.
 
 ```tsx
 function FileEditor({ path }: { path: string }) {
-    const [content, setContent] = useState('')   // ✗ duplicate state
+    const [content, setContent] = useState('') // ✗ duplicate state
     // ...
 }
 ```
@@ -825,11 +826,11 @@ State lives on the service. React subscribes via signal hooks.
 ### ❌ Calling service methods directly for user-initiated mutations
 
 ```tsx
-<Button onClick={() => textModels.save(activeDocId)}>Save</Button>   // ✗ bypasses actions
+<Button onClick={() => textModels.save(activeDocId)}>Save</Button> // ✗ bypasses actions
 ```
 
 ```tsx
-<Button onClick={() => actions.run('editor.save')}>Save</Button>     // ✓
+<Button onClick={() => actions.run('editor.save')}>Save</Button> // ✓
 ```
 
 Going through actions means the same code path serves the button, the menu, the keybinding, the command palette, and tests. Direct method calls are fine in services and in `useEffect` bootstrap, not in user-initiated paths.
@@ -838,7 +839,7 @@ Going through actions means the same code path serves the button, the menu, the 
 
 ```ts
 // somewhere/globals.ts
-export let lspService: LspService | null = null   // ✗ no
+export let lspService: LspService | null = null // ✗ no
 ```
 
 Services receive deps via constructor. The `Project` container wires them. No globals, no service locator.
@@ -847,7 +848,7 @@ Services receive deps via constructor. The `Project` container wires them. No gl
 
 ```ts
 const dirty = textModels.get(id)?.dirty
-if (dirty) (dirty as Signal<boolean>).value = false   // ✗ no
+if (dirty) (dirty as Signal<boolean>).value = false // ✗ no
 ```
 
 Public signals are `ReadonlySignal<T>`. Writes go through service methods.
@@ -856,7 +857,8 @@ Public signals are `ReadonlySignal<T>`. Writes go through service methods.
 
 ```ts
 class TextModelService {
-    showSaveDialog() {                    // ✗ services don't render UI
+    showSaveDialog() {
+        // ✗ services don't render UI
         // ...
     }
 }

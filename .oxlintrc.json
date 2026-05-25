@@ -92,14 +92,26 @@
         {
             "files": ["common/src/model/**/*.ts", "common/src/model/**/*.tsx"],
             "rules": {
-                "no-restricted-imports": ["error", {
-                    "paths": [
-                        { "name": "react", "message": "Model services must not import React. Hooks belong in a sibling `react.ts` file. See docs/model-architecture.md." },
-                        { "name": "react-dom", "message": "Model services must not import React. See docs/model-architecture.md." },
-                        { "name": "@base-ui/react", "message": "UI primitives belong in components, not model services." }
-                    ],
-                    "patterns": ["react/*", "react-dom/*"]
-                }],
+                "no-restricted-imports": [
+                    "error",
+                    {
+                        "paths": [
+                            {
+                                "name": "react",
+                                "message": "Model services must not import React. Hooks belong in a sibling `react.ts` file. See docs/model-architecture.md."
+                            },
+                            {
+                                "name": "react-dom",
+                                "message": "Model services must not import React. See docs/model-architecture.md."
+                            },
+                            {
+                                "name": "@base-ui/react",
+                                "message": "UI primitives belong in components, not model services."
+                            }
+                        ],
+                        "patterns": ["react/*", "react-dom/*"]
+                    }
+                ],
                 "no-underscore-dangle": "off"
             }
         },

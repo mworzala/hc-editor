@@ -16,9 +16,7 @@ export function useLspClient(): LspClient | null {
     return useSignal(useProject().lsp.client)
 }
 
-export function useDiagnosticsForUri(
-    uri: string | null | undefined,
-): readonly Diagnostic[] {
+export function useDiagnosticsForUri(uri: string | null | undefined): readonly Diagnostic[] {
     const lsp = useProject().lsp
     const sig = uri ? lsp.diagnosticsForUri(uri) : EMPTY_DIAGS
     return useSignal(sig)

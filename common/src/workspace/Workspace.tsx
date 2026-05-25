@@ -30,7 +30,13 @@ import { readDragData } from './drag-data'
 import { EditorGroup } from './EditorGroup'
 import { ResizeHandle } from './ResizeHandle'
 import { ToolDock } from './ToolDock'
-import { type DockId, type DragSide, type Tab, type TabRegistry, type WorkspaceState } from './types'
+import {
+    type DockId,
+    type DragSide,
+    type Tab,
+    type TabRegistry,
+    type WorkspaceState,
+} from './types'
 
 type WorkspaceProps = {
     /** Render inside a tool dock that has no tabs. Used by hosts to surface a
@@ -179,11 +185,7 @@ function WorkspaceInner({ className }: { className?: string }) {
                 const fromIdx = leaf.tabs.findIndex((t) => t.id === drag.tab.id)
                 const toIdx = leaf.tabs.findIndex((t) => t.id === overData.tabId)
                 if (fromIdx !== -1 && toIdx !== -1) {
-                    layout.reorderTabs(
-                        { kind: 'editor', leafId: overLoc.leafId },
-                        fromIdx,
-                        toIdx,
-                    )
+                    layout.reorderTabs({ kind: 'editor', leafId: overLoc.leafId }, fromIdx, toIdx)
                 }
                 return
             }
@@ -403,9 +405,7 @@ function ShellLayout({ layout, state, activeDragKind, hoveredPaneId }: ShellLayo
                             onActivate={(id) =>
                                 layout.activateTab({ kind: 'tool', dock: 'right' }, id)
                             }
-                            onClose={(id) =>
-                                layout.closeTab({ kind: 'tool', dock: 'right' }, id)
-                            }
+                            onClose={(id) => layout.closeTab({ kind: 'tool', dock: 'right' }, id)}
                         />
                     </Panel>
                 </>

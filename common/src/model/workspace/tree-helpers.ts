@@ -3,12 +3,7 @@
 // the old Zustand store so behavior is byte-for-byte preserved.
 
 import { DEFAULT_SPLIT_BIAS } from '../../workspace/constants'
-import type {
-    DockId,
-    EditorGroupNode,
-    Tab,
-    WorkspaceState,
-} from '../../workspace/types'
+import type { DockId, EditorGroupNode, Tab, WorkspaceState } from '../../workspace/types'
 
 export type TabLocation = { kind: 'tool'; dock: DockId } | { kind: 'editor'; leafId: string }
 

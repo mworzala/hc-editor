@@ -8,10 +8,7 @@ export { AuthGate, OpenFromGame } from './gate'
 export { Launcher } from './launcher'
 export { createHashLaunchCodeSource } from '../model/auth/launch-code'
 export { createWebCryptoKeyStore } from '../model/auth/keystore'
-export {
-    createIndexedDbSessionStore,
-    createMemorySessionStore,
-} from '../model/auth/sessionstore'
+export { createIndexedDbSessionStore, createMemorySessionStore } from '../model/auth/sessionstore'
 export { createTokenManager, type TokenManager, type TokenManagerDeps } from '../model/auth/tokens'
 export { redeemLaunchCode, type RedeemDeps, type RedeemOutcome } from '../model/auth/redeem'
 export { getActiveProjectId, setActiveProjectId } from './active-project'

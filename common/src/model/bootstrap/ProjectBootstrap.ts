@@ -14,8 +14,8 @@
 import { v1MapEditorBootstrap, type HCClient, type MapInfo } from '@hollowcube/api'
 
 import type { Platform } from '../../platform'
-import { computed, signal, type ReadonlySignal } from '../foundation/signal'
 import type { FileTreeService } from '../files/FileTreeService'
+import { computed, signal, type ReadonlySignal } from '../foundation/signal'
 
 export type BootstrapStatus =
     | { kind: 'idle' }

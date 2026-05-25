@@ -15,9 +15,8 @@ export const apiTestEditor: EditorDefinition = {
     render: () => (
         <div className='text-muted-foreground flex h-full items-center justify-center p-6 text-sm'>
             <div className='max-w-md text-center'>
-                The API test demo was removed when the model layer took ownership of
-                project fetching. Reach the API via `v1Map*` functions and
-                `useApp().client` directly.
+                The API test demo was removed when the model layer took ownership of project
+                fetching. Reach the API via `v1Map*` functions and `useApp().client` directly.
             </div>
         </div>
     ),

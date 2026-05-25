@@ -33,18 +33,11 @@ import { TextModelService } from './text-models/TextModelService'
 import { findLeaf } from './workspace/tree-helpers'
 import { WorkspaceLayoutService } from './workspace/WorkspaceLayoutService'
 
-// Tool kinds known to the host. Mirrored here so `Project` can pre-declare
-// the `tool.<kind>` context-key derivations. Adding a new tool requires a
-// one-line change here too; if more tools land, switching to a dynamic
-// registration (e.g. host hands a tool list to `Project` at construction)
-// is a small refactor.
-const KNOWN_TOOL_KINDS = ['tool:files', 'tool:structure', 'tool:problems', 'tool:lsp-log'] as const
-
 function toolKindContextKey(kind: string): string {
     // `tool:lsp-log` → `tool.lspLog`. Hyphens aren't legal in the
     // when-clause grammar's identifier production; camelCase the suffix.
-    const slug = kind.slice('tool:'.length)
-    const camel = slug.replace(/-([a-z])/gu, (_, c: string) => c.toUpperCase())
+    const slug = kind.startsWith('tool:') ? kind.slice('tool:'.length) : kind
+    const camel = slug.replaceAll(/-([a-z])/gu, (_, c: string) => c.toUpperCase())
     return `tool.${camel}`
 }
 
@@ -84,6 +77,7 @@ export class Project {
     readonly lsp: LspService
     readonly events: ServerEventsConnection
     readonly navigation: NavigationService
+    private readonly _toolKinds: readonly string[]
     private readonly _stopLspBundleEffect: () => void
     private readonly _stopTextModelGC: () => void
 
@@ -91,6 +85,7 @@ export class Project {
         this.projectId = deps.projectId
         this.platform = deps.platform
         this.client = deps.client
+        this._toolKinds = deps.tools.map((t) => t.kind)
 
         // Foundations (no deps).
         this.context = new ContextService()
@@ -257,13 +252,15 @@ export class Project {
         })
 
         // tool.<kind> keys — true when the tool is mounted in any dock.
-        for (const kind of KNOWN_TOOL_KINDS) {
-            const key = toolKindContextKey(kind)
+        // Driven from the host-supplied tool list; no second mirror to
+        // keep in sync.
+        for (const tool of this._toolKinds) {
+            const key = toolKindContextKey(tool)
             context.derive(key, () => {
                 // lint:signals-ignore
                 const state = layout.state.value
                 for (const dock of ['left', 'right', 'bottom'] as const) {
-                    if (state[dock].tabs.some((t) => t.kind === kind)) return true
+                    if (state[dock].tabs.some((t) => t.kind === tool)) return true
                 }
                 return false
             })

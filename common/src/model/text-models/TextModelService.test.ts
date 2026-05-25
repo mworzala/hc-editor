@@ -225,6 +225,55 @@ describe('TextModelService — save', () => {
         expect(pendingFiles.get(tempId)).toBeUndefined()
     })
 
+    // Regression: right-click "New File" in the tree creates a pending
+    // entry that already has a chosen path; the tab opens against
+    // `unsaved:<tempId>` and the model gets its target path via
+    // `getOrOpen({ initialPath })`. First save must (a) rekey the model
+    // from `unsaved:...` to the path, (b) call `pendingFiles.remove(tempId)`.
+    // If the model is keyed by the path directly, save sees
+    // `model.id === path`, skips rekey, leaves the pending entry behind,
+    // and the file tree renders the same path twice — once canonical,
+    // once pending — until refresh.
+    test('first save of new-file-with-chosen-path rekeys and removes pending entry', async () => {
+        const path = 'src/new-file.luau'
+        const tempId = pendingFiles.addAtPath(path)
+        const docId = `unsaved:${tempId}`
+        const m = svc.getOrOpen(docId, '', { initialPath: path })
+        // The model knows its target path immediately — that's what makes
+        // autosave fire (autosave requires `model.path !== null`).
+        expect(m.path.peek()).toBe(path)
+        expect(m.tempId).toBe(tempId)
+        m.setContent('hello')
+
+        const result = await svc.save(docId)
+        expect(result.ok).toBe(true)
+
+        // Model rekeyed under the canonical path; old docId is gone.
+        expect(svc.get(docId)).toBeUndefined()
+        const promoted = svc.get(path)
+        expect(promoted).toBeDefined()
+        expect(promoted?.path.peek()).toBe(path)
+        expect(promoted?.tempId).toBeNull()
+
+        // The pending placeholder is removed — without this the file
+        // tree would render `path` twice (canonical + pending).
+        expect(pendingFiles.get(tempId)).toBeUndefined()
+    })
+
+    test('autosave fires for a new-file-with-chosen-path model', async () => {
+        const path = 'src/autosaved.luau'
+        const tempId = pendingFiles.addAtPath(path)
+        const docId = `unsaved:${tempId}`
+        const m = svc.getOrOpen(docId, '', { initialPath: path })
+        m.setContent('typed')
+        await new Promise((r) => setTimeout(r, 1000))
+        expect(fake.calls.update).toHaveLength(1)
+        expect(fake.calls.update[0]?.path).toBe(path)
+        // Autosave should also have triggered the rekey + cleanup path.
+        expect(pendingFiles.get(tempId)).toBeUndefined()
+        expect(svc.get(path)).toBeDefined()
+    })
+
     test('save error surfaces a network SaveError', async () => {
         fake.setNextUpdateError(new Error('offline'))
         const m = svc.getOrOpen('a.luau', 'x')

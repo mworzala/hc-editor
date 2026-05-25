@@ -50,13 +50,22 @@ export function buildFileTree(
     extras: BuildFileTreeExtras = {},
 ): FileTreeNode[] {
     const entries: BuilderEntry[] = []
+    const canonicalPaths = new Set<string>()
     for (const f of files) {
         const segments = splitPath(f.path)
         if (segments.length === 0) continue
         entries.push({ kind: 'file', segments, id: f.path, contentType: f.contentType })
+        canonicalPaths.add(f.path)
     }
     for (const p of pending) {
         if (!p.path) continue
+        // Defensive dedupe: if a pending entry's path has already landed
+        // canonically (save succeeded, server confirmed, file in the map)
+        // skip the pending placeholder. Without this, a missed
+        // `pendingFiles.remove(tempId)` after save would render the same
+        // path twice — once for the canonical entry and once for the
+        // stale pending entry — until refresh.
+        if (canonicalPaths.has(p.path)) continue
         const segments = splitPath(p.path)
         if (segments.length === 0) continue
         entries.push({ kind: 'file', segments, id: `pending:${p.tempId}`, pending: true })

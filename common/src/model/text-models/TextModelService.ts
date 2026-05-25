@@ -134,15 +134,36 @@ export class TextModelService {
 
     /** Open a model (or reuse an existing one). Refcounted: each call
      *  bumps the refcount; `close` decrements. The first opener supplies
-     *  the initial content; subsequent opens ignore it. */
-    getOrOpen(docId: DocumentId, initialContent: string): TextModel {
+     *  the initial content; subsequent opens ignore it.
+     *
+     *  `opts.initialPath` — when opening a brand-new `unsaved:<tempId>`
+     *  model that already has a chosen target path (right-click "New
+     *  File" in the file tree), pass the path here so the model knows
+     *  its target. Autosave + first-save use this path, then save
+     *  rekeys the model from `unsaved:<tempId>` to the path and clears
+     *  the pending entry. Ignored on existing models and on docIds that
+     *  already encode a path. */
+    getOrOpen(
+        docId: DocumentId,
+        initialContent: string,
+        opts?: { initialPath?: string },
+    ): TextModel {
         const existing = this._modelsInternal.get(docId)
         if (existing) {
             this._refcounts.set(docId, (this._refcounts.get(docId) ?? 0) + 1)
             return existing
         }
-        const { path, tempId } = parseDocId(docId)
-        const model = createTextModel({ id: docId, tempId, path, initialContent })
+        const parsed = parseDocId(docId)
+        // For untitled docIds, honor an explicit `initialPath` so the model
+        // can autosave + rekey on first save. Path-based docIds always win
+        // — the path comes from the id itself.
+        const path = parsed.path ?? opts?.initialPath ?? null
+        const model = createTextModel({
+            id: docId,
+            tempId: parsed.tempId,
+            path,
+            initialContent,
+        })
         this._modelsInternal.set(docId, model)
         this._refcounts.set(docId, 1)
         this._modelIds.value = [...this._modelIds.peek(), docId]

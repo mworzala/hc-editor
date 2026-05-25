@@ -201,9 +201,18 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     // result.
     const isExistingFile = effectivePath !== null && !payload.tempId
 
+    // Pending files (tempId set) ALWAYS use the `unsaved:<tempId>` docId
+    // — even when the pending entry has a chosen path. The path lives on
+    // the model's `path` signal (passed via `getOrOpen({ initialPath })`),
+    // not in the id. This guarantees that `TextModelService._doSave` sees
+    // `model.id !== savePath` on first save, fires the rekey path, and
+    // cleans up the pending entry via `pendingFiles.remove(tempId)`. If
+    // we used the path as the docId here, save would skip rekey, the
+    // pending entry would leak, and the file tree would render the same
+    // path twice (canonical + pending) until refresh.
     const docId = useMemo(() => {
-        if (effectivePath) return effectivePath
         if (payload.tempId) return `unsaved:${payload.tempId}`
+        if (effectivePath) return effectivePath
         return `unsaved:${tab.id}`
     }, [effectivePath, payload.tempId, tab.id])
 
@@ -275,18 +284,24 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
 
     // Stable callbacks for the binding. `showUsages` derives sourceText from
     // the current TextModel each invocation — kept here so the language
-    // module doesn't need to reach into the model layer.
+    // module doesn't need to reach into the model layer. The docId is read
+    // through a ref so the callback identity is stable across save-time
+    // rekeys (`unsaved:<tempId>` → path); including docId as a useCallback
+    // dep would invalidate the binding memo on first save, rebuild the LSP
+    // extension array, and remount the EditorView (losing cursor/scroll).
+    const docIdRef = useRef(docId)
+    docIdRef.current = docId
     const showUsagesForBinding = useCallback(
         (matches: UsageMatch[], anchorPos: number, sourceRange: { from: number; to: number }) => {
             const api = editorApiRef.current
             if (!api) return
-            const model = textModels.get(docId)
+            const model = textModels.get(docIdRef.current)
             const sourceText = model
                 ? model.content.peek().slice(sourceRange.from, sourceRange.to) || 'symbol'
                 : 'symbol'
             api.showUsages(sourceText, matches, anchorPos, sourceRange)
         },
-        [docId, textModels],
+        [textModels],
     )
 
     // Construct the binding once per (language, uri) combination. Disposed on
@@ -353,9 +368,16 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     useEffect(() => {
         if (openedRef.current) return
         if (isExistingFile && fileFetch.kind !== 'loaded') return
-        textModels.getOrOpen(docId, initialContent)
+        // `initialPath` matters for the "new file with chosen path" flow:
+        // docId is `unsaved:<tempId>` but the pending entry already carries
+        // the target path. Pass it through so autosave fires and the first
+        // save resolves to a rekey + pending cleanup. For purely-untitled
+        // tabs effectivePath is null and this is a no-op.
+        textModels.getOrOpen(docId, initialContent, {
+            initialPath: effectivePath ?? undefined,
+        })
         openedRef.current = true
-    }, [docId, textModels, isExistingFile, fileFetch.kind, initialContent])
+    }, [docId, textModels, isExistingFile, fileFetch.kind, initialContent, effectivePath])
 
     // Subscribe to the model's content for rendering. `useSignal` bridges
     // the model's `content` ReadonlySignal into React state.

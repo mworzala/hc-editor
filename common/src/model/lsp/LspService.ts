@@ -28,10 +28,10 @@ import type {
     WorkspaceEdit,
 } from 'vscode-languageserver-types'
 
+import { stringTokenAt } from '../../editor/extensions/tokens'
 import { runFormatOnView } from '../../editor/formatters/runFormat'
 import { fileUriFromPath } from '../../editor/languages/luau-editor-services'
 import type { EngineApiBundle } from '../../engine-api/bundle'
-import { stringTokenAt } from '../../editor/extensions/tokens'
 import { createApplyWorkspaceEditHandler } from '../../lsp/applyWorkspaceEdit'
 import { offsetToPosition, rangeToOffsets } from '../../lsp/cm/lspUtils'
 import { definitionFiles } from '../../lsp/definitionFiles'
@@ -49,12 +49,7 @@ import { startWorkspaceDiagnosticPolling } from '../../lsp/workspaceDiagnostics'
 import type { ActionRegistry } from '../actions/ActionRegistry'
 import type { ActiveEditorRegistry } from '../active-editor/ActiveEditorRegistry'
 import type { ContextService } from '../context/ContextService'
-import {
-    computed,
-    signal,
-    type ReadonlySignal,
-    type Signal,
-} from '../foundation/signal'
+import { computed, effect, signal, type ReadonlySignal, type Signal } from '../foundation/signal'
 import type { SearchService } from '../search/SearchService'
 import type { TextModelService } from '../text-models/TextModelService'
 
@@ -94,6 +89,7 @@ export class LspService {
     private _stopDiagListener: (() => void) | null = null
     private _stopWorkspaceDiagPoll: (() => void) | null = null
     private _stopStateListener: (() => void) | null = null
+    private _stopBufferMirror: (() => void) | null = null
     private _worker: Worker | null = null
     private readonly _contextDisposers: Array<() => void> = []
     private readonly _actionDisposers: Array<() => void> = []
@@ -201,6 +197,13 @@ export class LspService {
         client.setApplyWorkspaceEditHandler(createApplyWorkspaceEditHandler(this.deps.textModels))
         this._client.value = client
 
+        // Mirror every open text model into the LSP via didOpen/didChange.
+        // Lives on the service because the LSP keeps tracking a file once
+        // opened — there is no per-tab refcount to mirror. The effect
+        // auto-tracks the open-models registration and per-model content,
+        // so any keystroke (or a new model opening) re-fires.
+        this._stopBufferMirror = this._installBufferMirror(client)
+
         // Wire diagnostics → per-URI signals (single listener).
         this._stopDiagListener = client.onDiagnostics(
             (uri, diags) => {
@@ -244,10 +247,42 @@ export class LspService {
             })
     }
 
+    /** Install the open-buffer → LSP mirror. Lives on the service because
+     *  the LSP keeps tracking a file once opened — there is no per-tab
+     *  refcount to mirror. The effect auto-tracks the open-models
+     *  registration and per-model content, so any keystroke (or a new
+     *  model opening) re-fires this. */
+    private _installBufferMirror(client: LspClient): () => void {
+        const seenContent = new Map<string, string>()
+        const stop = effect(() => {
+            for (const model of this.deps.textModels.openModels.value) {
+                if (!isLuauDocId(model.id)) continue
+                const content = model.content.value
+                const uri = fileUriFromPath(model.id)
+                if (!seenContent.has(model.id)) {
+                    seenContent.set(model.id, content)
+                    client.openDocument(uri, 'luau', content)
+                    continue
+                }
+                const prev = seenContent.get(model.id)
+                if (prev !== content) {
+                    seenContent.set(model.id, content)
+                    client.didChange(uri, content)
+                }
+            }
+        })
+        return () => {
+            stop()
+            seenContent.clear()
+        }
+    }
+
     /** Stop the worker and clear state. Returns the underlying client's
      *  stop promise so callers can await full cleanup. Idempotent. */
     async stop(): Promise<void> {
         const client = this._client.peek()
+        this._stopBufferMirror?.()
+        this._stopBufferMirror = null
         this._stopWorkspaceDiagPoll?.()
         this._stopWorkspaceDiagPoll = null
         this._stopDiagListener?.()
@@ -438,6 +473,11 @@ export class LspService {
             }),
         )
     }
+}
+
+function isLuauDocId(id: string): boolean {
+    if (id.startsWith('unsaved:')) return false
+    return id.endsWith('.luau') || id.endsWith('.lua')
 }
 
 function overlappingDiagnostics(diagnostics: readonly Diagnostic[], range: Range): Diagnostic[] {

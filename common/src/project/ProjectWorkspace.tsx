@@ -20,7 +20,6 @@ import { textEditor } from './editors/text'
 import { welcomeEditor } from './editors/welcome'
 import { ProjectErrorBoundary } from './error-boundary'
 import { createInitialWorkspaceState } from './initial-state'
-import { LspBufferBridge } from './LspBufferBridge'
 import { ProjectTopBar } from './ProjectTopBar'
 import { type AnyEditorDefinition, type ToolDefinition } from './registry'
 import { RegistryProvider, useTabRegistry, useTools } from './registry-context'
@@ -52,7 +51,6 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
                 >
                     <RegistryProvider tools={TOOLS} editors={EDITORS}>
                         <TooltipProvider>
-                            <LspBufferBridge />
                             <EditorFocusBridge />
                             <ActionHotkeyBridge />
                             <NativeMenuBridge />

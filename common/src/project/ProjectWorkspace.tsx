@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 import { TooltipProvider } from '@hollowcube/design-system'
 
@@ -66,6 +66,11 @@ export function ProjectWorkspace({ projectId }: { projectId: string }) {
 // Constructs the model-layer `Project` once via `app.openProject(...)` and
 // exposes it through `<ProjectProvider>`. Page shells call us with the
 // project id; everything below reads via `useProject()`.
+//
+// Opens the project in a `useState` initializer so the value is available
+// on the first render — no `useRef` + `forceRender` ceremony, no wasted
+// initial render returning null. `app.openProject` is idempotent for the
+// same id, so React 18's strict-mode double-init is safe.
 function ProjectModelBridge({
     projectId,
     children,
@@ -95,27 +100,36 @@ function ProjectModelBridge({
             })),
         [],
     )
-    const projectRef = useRef<ReturnType<typeof app.openProject> | null>(null)
-    const [, forceRender] = useState(0)
 
-    useEffect(() => {
-        const project = app.openProject(projectId, {
+    const [project, setProject] = useState(() =>
+        app.openProject(projectId, {
             initialLayout,
             tools: toolMetadata,
             editors: editorMetadata,
-        })
-        projectRef.current = project
-        forceRender((n) => n + 1)
+        }),
+    )
+
+    // Reopen on projectId change.
+    useEffect(() => {
+        if (project.projectId === projectId) return
+        setProject(
+            app.openProject(projectId, {
+                initialLayout,
+                tools: toolMetadata,
+                editors: editorMetadata,
+            }),
+        )
+    }, [app, projectId, initialLayout, toolMetadata, editorMetadata, project])
+
+    // Close on unmount if this is still the active project.
+    useEffect(() => {
         return () => {
             if (app.currentProject.peek() === project) {
                 app.closeProject()
             }
-            if (projectRef.current === project) projectRef.current = null
         }
-    }, [app, projectId, initialLayout, toolMetadata, editorMetadata])
+    }, [app, project])
 
-    const project = projectRef.current
-    if (!project) return null
     return <ModelProjectProvider project={project}>{children}</ModelProjectProvider>
 }
 

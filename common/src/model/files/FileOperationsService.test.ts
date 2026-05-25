@@ -2,11 +2,7 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { HCClient, MapFile } from '@hollowcube/api'
 
-import { createMemoryStorage } from '../../platform'
-import type { EditorGroupNode, Tab, WorkspaceState } from '../../workspace/types'
-import { ActionRegistry } from '../actions/ActionRegistry'
-import { ContextService } from '../context/ContextService'
-import { WorkspaceLayoutService } from '../workspace/WorkspaceLayoutService'
+import { makeTestCollaborators } from '../test-helpers'
 import { FileOperationsService } from './FileOperationsService'
 import { FileTreeService } from './FileTreeService'
 import { PendingFilesService } from './PendingFilesService'
@@ -92,49 +88,27 @@ function extractFilePath(reqPath: string): string {
     return reqPath.slice(idx + '/files/'.length)
 }
 
-function leaf(id: string, tabs: Tab[] = [], activeId: string | null = null): EditorGroupNode {
-    return { kind: 'leaf', id, tabs, activeId }
-}
-
-function makeInitial(centerLeafId = 'leaf-1'): WorkspaceState {
-    return {
-        columnSizes: [22, 78, 0],
-        middleSizes: [100, 0],
-        docksVisible: { left: true, right: false, bottom: false },
-        left: { tabs: [], activeId: null },
-        right: { tabs: [], activeId: null },
-        bottom: { tabs: [], activeId: null },
-        center: leaf(centerLeafId),
-        focusedLeafId: centerLeafId,
-    }
-}
-
 let fake: FakeClient
 let fileTree: FileTreeService
 let pendingFiles: PendingFilesService
 let textModels: TextModelService
-let layout: WorkspaceLayoutService
-let actions: ActionRegistry
-let context: ContextService
+let collaborators: ReturnType<typeof makeTestCollaborators>
 let fileOps: FileOperationsService
 
 beforeEach(() => {
     fake = makeFakeClient()
     fileTree = new FileTreeService({ projectId: 'p1', client: fake.client })
     pendingFiles = new PendingFilesService()
-    context = new ContextService()
-    actions = new ActionRegistry({ context })
-    layout = new WorkspaceLayoutService({
-        storage: createMemoryStorage(),
-        storageKey: 'test:ops',
-        initialState: makeInitial(),
-        persistDebounceMs: 0,
-    })
+    collaborators = makeTestCollaborators()
     textModels = new TextModelService({
         projectId: 'p1',
         client: fake.client,
         fileTree,
         pendingFiles,
+        actions: collaborators.actions,
+        activeEditor: collaborators.activeEditor,
+        layout: collaborators.layout,
+        dialogs: collaborators.dialogs,
     })
     fileOps = new FileOperationsService({
         projectId: 'p1',
@@ -142,18 +116,17 @@ beforeEach(() => {
         fileTree,
         pendingFiles,
         textModels,
-        layout,
+        layout: collaborators.layout,
     })
 })
 
 afterEach(() => {
     textModels.dispose()
-    layout.dispose()
     fileTree.dispose()
     pendingFiles.dispose()
-    actions.dispose()
-    context.dispose()
+    collaborators.dispose()
 })
+
 
 describe('FileOperationsService — move (pending)', () => {
     test('pending source: just reassigns the path on the pending entry', async () => {
@@ -217,13 +190,13 @@ describe('FileOperationsService — move (real)', () => {
         fileTree.installAll([mapFile('a.luau')])
         const m = textModels.getOrOpen('a.luau', 'orig')
         m.setContent('content')
-        layout.addTab(
+        collaborators.layout.addTab(
             { kind: 'editor', leafId: 'leaf-1' },
             { id: 'tab-1', kind: 'editor:text', title: 'a.luau', payload: { path: 'a.luau' } },
         )
         const result = await fileOps.move('a.luau', 'sub/b.luau')
         expect(result.ok).toBe(true)
-        const center = layout.center.peek()
+        const center = collaborators.layout.center.peek()
         if (center.kind !== 'leaf') throw new Error('expected leaf')
         const tab = center.tabs[0]
         expect((tab?.payload as { path?: string })?.path).toBe('sub/b.luau')
@@ -242,13 +215,13 @@ describe('FileOperationsService — move (real)', () => {
 describe('FileOperationsService — delete', () => {
     test('closes matching editor tabs before issuing the server delete', async () => {
         fileTree.installAll([mapFile('a.luau')])
-        layout.addTab(
+        collaborators.layout.addTab(
             { kind: 'editor', leafId: 'leaf-1' },
             { id: 'tab-1', kind: 'editor:text', title: 'a.luau', payload: { path: 'a.luau' } },
         )
         const result = await fileOps.delete('a.luau')
         expect(result.ok).toBe(true)
-        const center = layout.center.peek()
+        const center = collaborators.layout.center.peek()
         if (center.kind !== 'leaf') throw new Error('expected leaf')
         expect(center.tabs).toHaveLength(0)
         expect(fake.calls.delete).toEqual(['a.luau'])
@@ -256,16 +229,16 @@ describe('FileOperationsService — delete', () => {
 
     test('closes every tab beneath a folder-style delete prefix', async () => {
         fileTree.installAll([mapFile('src/a.luau'), mapFile('src/b.luau')])
-        layout.addTab(
+        collaborators.layout.addTab(
             { kind: 'editor', leafId: 'leaf-1' },
             { id: 't1', kind: 'editor:text', title: 'a', payload: { path: 'src/a.luau' } },
         )
-        layout.addTab(
+        collaborators.layout.addTab(
             { kind: 'editor', leafId: 'leaf-1' },
             { id: 't2', kind: 'editor:text', title: 'b', payload: { path: 'src/b.luau' } },
         )
         await fileOps.delete('src')
-        const center = layout.center.peek()
+        const center = collaborators.layout.center.peek()
         if (center.kind !== 'leaf') throw new Error('expected leaf')
         expect(center.tabs).toHaveLength(0)
     })

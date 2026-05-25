@@ -64,20 +64,18 @@ export interface TextModelServiceDeps {
     client: HCClient
     fileTree: FileTreeService
     pendingFiles: PendingFilesService
-    /** Optional. When provided the service registers
-     *  `editor.save` / `editor.saveAll` / `editor.revert` / `editor.newFile`
-     *  in the constructor. Tests that don't exercise actions can omit. */
-    actions?: ActionRegistry
-    /** Required when `actions` is provided. The save/format/revert
-     *  handlers resolve the focused doc via `activeEditor.activeDocId`. */
-    activeEditor?: ActiveEditorRegistry
-    /** Required when `actions` is provided. `editor.newFile` opens a new
-     *  untitled tab through this service. */
-    layout?: WorkspaceLayoutService
-    /** Optional. When provided, the `editor.save` handler opens a
-     *  save-as path dialog through this service for untitled buffers
-     *  (instead of relying on per-tab React state). */
-    dialogs?: DialogService
+    /** Action registry. Save / format / revert / newFile handlers
+     *  register on construction. */
+    actions: ActionRegistry
+    /** Action handlers resolve the focused doc via
+     *  `activeEditor.activeDocId`. */
+    activeEditor: ActiveEditorRegistry
+    /** `editor.newFile` opens a new untitled tab through this service;
+     *  `_doSave` patches matching open tabs on rekey. */
+    layout: WorkspaceLayoutService
+    /** The `editor.save` handler opens a save-as path dialog through
+     *  this service when an untitled buffer needs a path. */
+    dialogs: DialogService
 }
 
 export class TextModelService {
@@ -126,7 +124,7 @@ export class TextModelService {
     private readonly _actionDisposers: Array<() => void> = []
 
     constructor(private readonly deps: TextModelServiceDeps) {
-        if (deps.actions) this._registerActions()
+        this._registerActions()
     }
 
     /** Open a model (or reuse an existing one). Refcounted: each call
@@ -314,7 +312,6 @@ export class TextModelService {
 
     private _registerActions(): void {
         const { actions, activeEditor, layout, pendingFiles, dialogs } = this.deps
-        if (!actions || !activeEditor) return
 
         const focusedSave = async () => {
             const docId = activeEditor.activeDocId.peek()
@@ -322,9 +319,8 @@ export class TextModelService {
             const result = await this.save(docId)
             if (result.ok) return
             if (result.error.kind !== 'requires-path') return
-            // Untitled buffer needs a path. Open the dialog if we have one,
-            // and re-attempt the save with the chosen path.
-            if (!dialogs) return
+            // Untitled buffer needs a path. Open the dialog and re-attempt
+            // the save with the chosen path.
             const suggested = this._suggestedPathFor(docId)
             const path = await dialogs.savePath({ suggested })
             if (!path) return
@@ -355,29 +351,27 @@ export class TextModelService {
             }),
         )
 
-        if (layout) {
-            this._actionDisposers.push(
-                actions.register({
-                    id: 'editor.newFile',
-                    title: 'New Untitled File',
-                    keybinding: '$mod+n',
-                    menu: { path: 'file', group: 'new', order: 10 },
-                    run: () => {
-                        const tempId = pendingFiles.addUntitled()
-                        const leaf = resolveTargetLeaf(layout.state.peek())
-                        layout.addTab(
-                            { kind: 'editor', leafId: leaf.id },
-                            {
-                                id: makeId('tab'),
-                                kind: TEXT_EDITOR_KIND,
-                                title: 'Untitled',
-                                payload: { tempId },
-                            },
-                        )
-                    },
-                }),
-            )
-        }
+        this._actionDisposers.push(
+            actions.register({
+                id: 'editor.newFile',
+                title: 'New Untitled File',
+                keybinding: '$mod+n',
+                menu: { path: 'file', group: 'new', order: 10 },
+                run: () => {
+                    const tempId = pendingFiles.addUntitled()
+                    const leaf = resolveTargetLeaf(layout.state.peek())
+                    layout.addTab(
+                        { kind: 'editor', leafId: leaf.id },
+                        {
+                            id: makeId('tab'),
+                            kind: TEXT_EDITOR_KIND,
+                            title: 'Untitled',
+                            payload: { tempId },
+                        },
+                    )
+                },
+            }),
+        )
     }
 
     // ------------- internals -------------
@@ -449,7 +443,6 @@ export class TextModelService {
      *  from `unsaved:<tempId>` to `path`. */
     private _patchTabsForRekey(tempId: string, path: string): void {
         const layout = this.deps.layout
-        if (!layout) return
         const state = layout.state.peek()
         const newTitle = basename(path)
         const visit = (tabs: readonly Tab[]) => {

@@ -5,6 +5,7 @@ import type { HCClient, MapFile } from '@hollowcube/api'
 
 import { FileTreeService } from '../files/FileTreeService'
 import { PendingFilesService } from '../files/PendingFilesService'
+import { makeTestCollaborators } from '../test-helpers'
 import type { TextModelChange } from './TextModel'
 import { TextModelService } from './TextModelService'
 
@@ -68,17 +69,23 @@ function extractFilePath(reqPath: string): string {
 let fake: FakeClient
 let fileTree: FileTreeService
 let pendingFiles: PendingFilesService
+let collaborators: ReturnType<typeof makeTestCollaborators>
 let svc: TextModelService
 
 beforeEach(() => {
     fake = makeFakeClient()
     fileTree = new FileTreeService({ projectId: 'p1', client: fake.client })
     pendingFiles = new PendingFilesService()
+    collaborators = makeTestCollaborators()
     svc = new TextModelService({
         projectId: 'p1',
         client: fake.client,
         fileTree,
         pendingFiles,
+        actions: collaborators.actions,
+        activeEditor: collaborators.activeEditor,
+        layout: collaborators.layout,
+        dialogs: collaborators.dialogs,
     })
 })
 
@@ -86,6 +93,7 @@ afterEach(() => {
     svc.dispose()
     fileTree.dispose()
     pendingFiles.dispose()
+    collaborators.dispose()
 })
 
 describe('TextModelService — basic lifecycle', () => {
@@ -495,28 +503,10 @@ describe('TextModelService — pruneToIds (layout-driven GC)', () => {
 
 describe('TextModelService — editor.save action with DialogService', () => {
     test('untitled buffer + dialog confirms a path → save proceeds with that path', async () => {
-        const { ActionRegistry } = await import('../actions/ActionRegistry')
-        const { ContextService } = await import('../context/ContextService')
-        const { ActiveEditorRegistry } = await import('../active-editor/ActiveEditorRegistry')
-        const { DialogService } = await import('../dialogs/DialogService')
-
-        const context = new ContextService()
-        const actions = new ActionRegistry({ context })
-        const activeEditor = new ActiveEditorRegistry()
-        const dialogs = new DialogService()
-        const wired = new TextModelService({
-            projectId: 'p1',
-            client: fake.client,
-            fileTree,
-            pendingFiles,
-            actions,
-            activeEditor,
-            dialogs,
-        })
-
+        const { actions, activeEditor, dialogs, context } = collaborators
         const tempId = pendingFiles.addUntitled()
         const docId = `unsaved:${tempId}`
-        const model = wired.getOrOpen(docId, '')
+        const model = svc.getOrOpen(docId, '')
         model.setContent('hello world')
         activeEditor.setActiveDocId(docId)
         // Action when-clause needs these to evaluate true.
@@ -540,40 +530,16 @@ describe('TextModelService — editor.save action with DialogService', () => {
 
         expect(fake.calls.update[0]?.path).toBe('docs/hello.luau')
         expect(fake.calls.update[0]?.body).toBe('hello world')
-        expect(wired.get('docs/hello.luau')?.path.peek()).toBe('docs/hello.luau')
+        expect(svc.get('docs/hello.luau')?.path.peek()).toBe('docs/hello.luau')
         // tempId removed from pending entries
         expect(pendingFiles.get(tempId)).toBeUndefined()
-
-        wired.dispose()
-        dialogs.dispose()
-        activeEditor.dispose()
-        actions.dispose()
-        context.dispose()
     })
 
     test('untitled buffer + dialog cancelled → no save', async () => {
-        const { ActionRegistry } = await import('../actions/ActionRegistry')
-        const { ContextService } = await import('../context/ContextService')
-        const { ActiveEditorRegistry } = await import('../active-editor/ActiveEditorRegistry')
-        const { DialogService } = await import('../dialogs/DialogService')
-
-        const context = new ContextService()
-        const actions = new ActionRegistry({ context })
-        const activeEditor = new ActiveEditorRegistry()
-        const dialogs = new DialogService()
-        const wired = new TextModelService({
-            projectId: 'p1',
-            client: fake.client,
-            fileTree,
-            pendingFiles,
-            actions,
-            activeEditor,
-            dialogs,
-        })
-
+        const { actions, activeEditor, dialogs, context } = collaborators
         const tempId = pendingFiles.addUntitled()
         const docId = `unsaved:${tempId}`
-        const m = wired.getOrOpen(docId, '')
+        const m = svc.getOrOpen(docId, '')
         m.setContent('hi')
         activeEditor.setActiveDocId(docId)
         context.set('editor.text', true)
@@ -588,12 +554,6 @@ describe('TextModelService — editor.save action with DialogService', () => {
         await new Promise((r) => setTimeout(r, 0))
 
         expect(fake.calls.update).toEqual([])
-        expect(wired.get(docId)?.dirty.peek()).toBe(true)
-
-        wired.dispose()
-        dialogs.dispose()
-        activeEditor.dispose()
-        actions.dispose()
-        context.dispose()
+        expect(svc.get(docId)?.dirty.peek()).toBe(true)
     })
 })

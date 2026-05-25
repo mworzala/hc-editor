@@ -64,13 +64,15 @@ type PrepareRenameResult =
 export interface LspServiceDeps {
     textModels: TextModelService
     context: ContextService
-    search?: SearchService
-    /** Optional. When provided the service registers
-     *  `editor.format` / `editor.codeAction` / `editor.rename`. */
-    actions?: ActionRegistry
-    /** Required when `actions` is provided. Action handlers resolve the
-     *  focused editor entry via `activeEditor.activeDocId`. */
-    activeEditor?: ActiveEditorRegistry
+    /** Search source registry. LspService self-registers a 'symbols'
+     *  source on construction. */
+    search: SearchService
+    /** Action registry. `editor.format` / `editor.codeAction` /
+     *  `editor.rename` are registered on construction. */
+    actions: ActionRegistry
+    /** Action handlers resolve the focused editor entry via
+     *  `activeEditor.activeDocId`. */
+    activeEditor: ActiveEditorRegistry
 }
 
 type WorkerFactory = () => Worker
@@ -93,7 +95,7 @@ export class LspService {
     private _worker: Worker | null = null
     private readonly _contextDisposers: Array<() => void> = []
     private readonly _actionDisposers: Array<() => void> = []
-    private readonly _searchSourceDisposer: (() => void) | null
+    private readonly _searchSourceDisposer: () => void
     private readonly _workerFactory: WorkerFactory
     private _disposed = false
 
@@ -141,9 +143,8 @@ export class LspService {
             // lint:signals-ignore
             this.deps.context.derive('lsp.luau.failed', () => this._status.value === 'failed'),
         )
-        this._searchSourceDisposer =
-            this.deps.search?.register({ id: 'symbols', title: 'Symbols' }) ?? null
-        if (this.deps.actions) this._registerActions()
+        this._searchSourceDisposer = this.deps.search.register({ id: 'symbols', title: 'Symbols' })
+        this._registerActions()
     }
 
     /** Return (lazy-create) the per-URI diagnostic signal. Consumers
@@ -314,7 +315,7 @@ export class LspService {
         this._actionDisposers.length = 0
         for (const d of this._contextDisposers) d()
         this._contextDisposers.length = 0
-        this._searchSourceDisposer?.()
+        this._searchSourceDisposer()
         this._diagnosticsByUri.clear()
         this.ui.dispose()
     }
@@ -323,7 +324,6 @@ export class LspService {
 
     private _registerActions(): void {
         const { actions, activeEditor } = this.deps
-        if (!actions || !activeEditor) return
 
         const focusedEntry = () => {
             const tabId = activeEditor.activeDocId.peek()

@@ -2,12 +2,10 @@ import { describe, expect, test } from 'bun:test'
 
 import type { HCClient, MapEventEnvelope, MapFile } from '@hollowcube/api'
 
-import { ActionRegistry } from '../actions/ActionRegistry'
-import { ContextService } from '../context/ContextService'
 import { FileTreeService } from '../files/FileTreeService'
 import { PendingFilesService } from '../files/PendingFilesService'
 import { LspService } from '../lsp/LspService'
-import { SearchService } from '../search/SearchService'
+import { makeTestCollaborators } from '../test-helpers'
 import { TextModelService } from '../text-models/TextModelService'
 import { ServerEventsConnection, type EventsStreamFactory } from './ServerEventsConnection'
 
@@ -26,9 +24,8 @@ type Harness = {
     fileTree: FileTreeService
     textModels: TextModelService
     lsp: LspService
-    context: ContextService
     pendingFiles: PendingFilesService
-    search: SearchService
+    collaborators: ReturnType<typeof makeTestCollaborators>
 }
 
 function makeHarness(): Harness {
@@ -38,8 +35,7 @@ function makeHarness(): Harness {
         bytesByPath: new Map(),
     }
     const client = {} as HCClient
-    const context = new ContextService()
-    const actions = new ActionRegistry({ context })
+    const collaborators = makeTestCollaborators()
     const fileTree = new FileTreeService({ projectId: 'p1', client })
     // Patch refresh to count calls.
     fileTree.refresh = () => {
@@ -52,10 +48,19 @@ function makeHarness(): Harness {
         client,
         fileTree,
         pendingFiles,
+        actions: collaborators.actions,
+        activeEditor: collaborators.activeEditor,
+        layout: collaborators.layout,
+        dialogs: collaborators.dialogs,
     })
-    const search = new SearchService({ actions })
-    const lsp = new LspService({ textModels, context, search })
-    return { fakes, fileTree, textModels, lsp, context, pendingFiles, search }
+    const lsp = new LspService({
+        textModels,
+        context: collaborators.context,
+        search: collaborators.search,
+        actions: collaborators.actions,
+        activeEditor: collaborators.activeEditor,
+    })
+    return { fakes, fileTree, textModels, lsp, pendingFiles, collaborators }
 }
 
 function disposeHarness(h: Harness) {
@@ -63,11 +68,13 @@ function disposeHarness(h: Harness) {
     h.textModels.dispose()
     h.pendingFiles.dispose()
     h.fileTree.dispose()
-    h.context.dispose()
-    h.search.dispose()
+    h.collaborators.dispose()
 }
 
-function pushEvents(events: MapEventEnvelope[]): { factory: EventsStreamFactory; close: () => void } {
+function pushEvents(events: MapEventEnvelope[]): {
+    factory: EventsStreamFactory
+    close: () => void
+} {
     let closed = false
     const factory: EventsStreamFactory = async function* () {
         for (const e of events) {

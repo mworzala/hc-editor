@@ -20,6 +20,7 @@ import { ContextService } from './context/ContextService'
 import { DialogService } from './dialogs/DialogService'
 import { EngineApiService } from './engine-api/EngineApiService'
 import { ServerEventsConnection } from './events/ServerEventsConnection'
+import { FileOperationsService } from './files/FileOperationsService'
 import { FileTreeService } from './files/FileTreeService'
 import { PendingFilesService } from './files/PendingFilesService'
 import { effect } from './foundation/signal'
@@ -76,6 +77,7 @@ export class Project {
     readonly search: SearchService
     readonly languages: LanguageService
     readonly fileTree: FileTreeService
+    readonly fileOperations: FileOperationsService
     readonly engineApi: EngineApiService
     readonly bootstrap: ProjectBootstrap
     readonly textModels: TextModelService
@@ -145,6 +147,14 @@ export class Project {
             activeEditor: this.activeEditor,
             layout: this.layout,
             dialogs: this.dialogs,
+        })
+        this.fileOperations = new FileOperationsService({
+            projectId: deps.projectId,
+            client: deps.client,
+            fileTree: this.fileTree,
+            pendingFiles: this.pendingFiles,
+            textModels: this.textModels,
+            layout: this.layout,
         })
 
         // Editor / workspace context-key derivations. Most keys are pure

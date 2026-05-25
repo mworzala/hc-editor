@@ -29,3 +29,7 @@ export function useFiles() {
 export function useFileTreeService() {
     return useProject().fileTree
 }
+
+export function useFileOperations() {
+    return useProject().fileOperations
+}

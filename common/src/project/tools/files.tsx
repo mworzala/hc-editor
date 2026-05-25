@@ -1,18 +1,16 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { FilePlusIcon, FilesIcon, PencilIcon, Trash2Icon } from 'lucide-react'
 
-import { v1MapFilesGet } from '@hollowcube/api'
 import { FileTree, type FileTreeNode, Input, ScrollArea } from '@hollowcube/design-system'
 
-import { useApp, useDiagnosticPaths, useLanguageService, useProject } from '../../model'
+import { useDiagnosticPaths, useLanguageService } from '../../model'
 import {
+    useFileOperations,
     useFileTreeService,
     usePendingFiles,
     usePendingFilesService,
 } from '../../model/files'
 import { useSignal } from '../../model/foundation/react'
-import { useLayout, type WorkspaceLayoutService } from '../../model/workspace'
-import { findLeaf, selectTabLocations } from '../../workspace'
 import { ActionContextMenu, useProjectActions } from '../actions'
 import { type ContextMenuAction } from '../actions/ActionContextMenu'
 import { TEXT_EDITOR_KIND } from '../editors/text'
@@ -39,16 +37,13 @@ type CtxMenuState =
 type NewFileTarget = { parent: string } | null
 
 function FilesPane() {
-    const project = useProject()
-    const { client: hcClient } = useApp()
     const fileTreeSvc = useFileTreeService()
     const files = useSignal(fileTreeSvc.list)
     const filesByPath = useSignal(fileTreeSvc.files)
     const pendingSvc = usePendingFilesService()
     const pending = usePendingFiles()
-    const textModels = project.textModels
+    const fileOps = useFileOperations()
     const { openEditor } = useProjectActions()
-    const layout = useLayout()
     const languageSvc = useLanguageService()
     const languageMimes = useMemo(() => languageSvc.allMimes(), [languageSvc])
     const errorPaths = useDiagnosticPaths()
@@ -79,74 +74,28 @@ function FilesPane() {
 
     const handleCancelNew = useCallback(() => setNewFile(null), [])
 
-    // Rename / move share the same path-rewrite primitive. Rename keeps the
-    // file inside its parent dir; move-into-folder relocates it under a new
-    // parent. Both go through the same flow: read current content (dirty doc
-    // if open, else GET), PUT to the new path, DELETE the old, repoint any
-    // open tabs. The server has no atomic rename endpoint today.
+    // Rename / move delegate to FileOperationsService — orchestration
+    // (content read, PUT + DELETE, model + tab repointing) lives there.
     const moveFileToPath = useCallback(
         async (sourceId: string, newPath: string) => {
-            // Pending files (not yet on the server): just update the path on
-            // the pending entry and reroute any tab payloads.
-            if (sourceId.startsWith('pending:')) {
-                const tempId = sourceId.slice('pending:'.length)
-                pendingSvc.assignPath(tempId, newPath)
-                return
-            }
-            const oldPath = sourceId
-            if (oldPath === newPath) return
-            if (filesByPath.has(newPath)) {
-                setOpenError(`${newPath}: already exists`)
-                return
-            }
-            // Prefer the open TextModel's in-memory content (dirty edits
-            // would be lost on a server GET). Falls back to the server
-            // when the file isn't open in any tab.
-            const openModel = textModels.get(oldPath)
-            let body: string
-            let contentType = 'text/plain'
-            if (openModel) {
-                body = openModel.content.peek()
-            } else {
-                try {
-                    const bytes = await v1MapFilesGet(hcClient, project.projectId, oldPath)
-                    body = new TextDecoder('utf-8', { fatal: false }).decode(bytes.bytes)
-                    contentType = bytes.contentType || 'text/plain'
-                } catch (e) {
-                    setOpenError(`${oldPath}: failed to read (${formatErr(e)})`)
-                    return
-                }
-            }
-            const result = await fileTreeSvc.rename(oldPath, newPath, body, contentType)
-            if (!result.ok) {
-                if (result.error.kind === 'exists') {
+            const result = await fileOps.move(sourceId, newPath)
+            if (result.ok) return
+            switch (result.error.kind) {
+                case 'exists':
                     setOpenError(`${newPath}: already exists`)
-                } else if (result.error.kind === 'write') {
+                    return
+                case 'read':
+                    setOpenError(`${sourceId}: failed to read (${formatErr(result.error.cause)})`)
+                    return
+                case 'write':
                     setOpenError(`${newPath}: write failed (${formatErr(result.error.cause)})`)
-                } else {
-                    setOpenError(`${oldPath}: failed (${formatErr(result.error.cause)})`)
-                }
-                return
-            }
-            // Repoint the open TextModel (if any) from oldPath to newPath.
-            textModels.handleRename(oldPath, newPath)
-            // Update any open tabs whose payload references oldPath.
-            const state = layout.state.peek()
-            const locations = selectTabLocations(state)
-            for (const [tabId, loc] of locations) {
-                if (!loc || loc.kind !== 'editor') continue
-                const leaf = findLeaf(state.center, loc.leafId)
-                const tab = leaf?.tabs.find((t) => t.id === tabId)
-                if (!tab || tab.kind !== TEXT_EDITOR_KIND) continue
-                const tabPath = (tab.payload as { path?: string } | undefined)?.path
-                if (tabPath !== oldPath) continue
-                layout.updateTab(tabId, {
-                    title: newPath.split('/').pop() ?? newPath,
-                    payload: { ...tab.payload, path: newPath },
-                })
+                    return
+                case 'unknown':
+                    setOpenError(`${sourceId}: failed (${formatErr(result.error.cause)})`)
+                    return
             }
         },
-        [fileTreeSvc, filesByPath, hcClient, pendingSvc, project.projectId, layout, textModels],
+        [fileOps],
     )
 
     const handleCommitRename = useCallback(
@@ -281,14 +230,9 @@ function FilesPane() {
 
     const handleDelete = useCallback(
         (path: string) => {
-            // Close any open editor tabs that reference this file (or any file
-            // beneath it for a deleted folder) BEFORE issuing the delete. The
-            // tab unmount cancels the editor's pending autosave timer, so we
-            // don't race the delete with a save that would resurrect the file.
-            closeTabsForPath(layout, path)
-            void fileTreeSvc.delete(path)
+            void fileOps.delete(path)
         },
-        [fileTreeSvc, layout],
+        [fileOps],
     )
 
     // Keyboard handler on the scroll container: Delete removes the selection,
@@ -385,29 +329,6 @@ function FilesPane() {
             ) : null}
         </div>
     )
-}
-
-/** Close every text editor tab whose path equals `target` or sits beneath it
- *  (folder delete). Closing happens before the server mutation so the editor
- *  unmounts and cancels its autosave timer ahead of the delete. */
-function closeTabsForPath(layout: WorkspaceLayoutService, target: string) {
-    const state = layout.state.peek()
-    const locations = selectTabLocations(state)
-    const matches: { tabId: string; loc: ReturnType<typeof locations.get> }[] = []
-    for (const [tabId, loc] of locations) {
-        if (!loc || loc.kind !== 'editor') continue
-        const leaf = findLeaf(state.center, loc.leafId)
-        const tab = leaf?.tabs.find((t) => t.id === tabId)
-        if (!tab || tab.kind !== TEXT_EDITOR_KIND) continue
-        const tabPath = (tab.payload as { path?: string } | undefined)?.path
-        if (!tabPath) continue
-        if (tabPath === target || tabPath.startsWith(`${target}/`)) {
-            matches.push({ tabId, loc })
-        }
-    }
-    for (const { tabId, loc } of matches) {
-        if (loc) layout.closeTab(loc, tabId)
-    }
 }
 
 function buildFilesContextActions(

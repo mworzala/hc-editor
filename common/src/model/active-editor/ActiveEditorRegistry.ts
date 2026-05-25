@@ -19,11 +19,6 @@ import { signal, type ReadonlySignal } from '../foundation/signal'
 export type ActiveEditorEntry = {
     view: EditorView
     language?: LanguageDefinition
-    /** Optional save handler. Globally-bound actions (`editor.save`) call this
-     *  to dispatch a save to the currently focused tab. Returns true on
-     *  successful save, false (or throws) if the save was cancelled or
-     *  errored. */
-    save?: () => Promise<boolean>
     /** LSP URI for this tab when an LSP binding is active. */
     lspUri?: string
 }

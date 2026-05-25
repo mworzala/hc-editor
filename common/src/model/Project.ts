@@ -17,6 +17,7 @@ import { ActionRegistry } from './actions/ActionRegistry'
 import { ActiveEditorRegistry } from './active-editor/ActiveEditorRegistry'
 import { ProjectBootstrap } from './bootstrap/ProjectBootstrap'
 import { ContextService } from './context/ContextService'
+import { DialogService } from './dialogs/DialogService'
 import { EngineApiService } from './engine-api/EngineApiService'
 import { ServerEventsConnection } from './events/ServerEventsConnection'
 import { FileTreeService } from './files/FileTreeService'
@@ -68,6 +69,7 @@ export class Project {
     readonly client: HCClient
     readonly context: ContextService
     readonly actions: ActionRegistry
+    readonly dialogs: DialogService
     readonly layout: WorkspaceLayoutService
     readonly activeEditor: ActiveEditorRegistry
     readonly pendingFiles: PendingFilesService
@@ -91,6 +93,7 @@ export class Project {
         // Foundations (no deps).
         this.context = new ContextService()
         this.actions = new ActionRegistry({ context: this.context })
+        this.dialogs = new DialogService()
 
         // One-shot static keys. `platform.desktop` gates desktop-only
         // actions (e.g. `editor.closeFocusedTab`).
@@ -141,6 +144,7 @@ export class Project {
             actions: this.actions,
             activeEditor: this.activeEditor,
             layout: this.layout,
+            dialogs: this.dialogs,
         })
 
         // Editor / workspace context-key derivations. Most keys are pure
@@ -200,6 +204,7 @@ export class Project {
         this.navigation.dispose()
         this.activeEditor.dispose()
         this.layout.dispose()
+        this.dialogs.dispose()
         this.actions.dispose()
         this.context.dispose()
     }

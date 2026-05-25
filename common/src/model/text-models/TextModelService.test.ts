@@ -1,5 +1,5 @@
-import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 import { ChangeSet } from '@codemirror/state'
+import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { HCClient, MapFile } from '@hollowcube/api'
 
@@ -490,5 +490,110 @@ describe('TextModelService — pruneToIds (layout-driven GC)', () => {
         svc.pruneToIds(new Set(['a.luau']))
         expect(svc.get('a.luau')).toBeDefined()
         expect(svc.get('a.luau')?.dirty.peek()).toBe(true)
+    })
+})
+
+describe('TextModelService — editor.save action with DialogService', () => {
+    test('untitled buffer + dialog confirms a path → save proceeds with that path', async () => {
+        const { ActionRegistry } = await import('../actions/ActionRegistry')
+        const { ContextService } = await import('../context/ContextService')
+        const { ActiveEditorRegistry } = await import('../active-editor/ActiveEditorRegistry')
+        const { DialogService } = await import('../dialogs/DialogService')
+
+        const context = new ContextService()
+        const actions = new ActionRegistry({ context })
+        const activeEditor = new ActiveEditorRegistry()
+        const dialogs = new DialogService()
+        const wired = new TextModelService({
+            projectId: 'p1',
+            client: fake.client,
+            fileTree,
+            pendingFiles,
+            actions,
+            activeEditor,
+            dialogs,
+        })
+
+        const tempId = pendingFiles.addUntitled()
+        const docId = `unsaved:${tempId}`
+        const model = wired.getOrOpen(docId, '')
+        model.setContent('hello world')
+        activeEditor.setActiveDocId(docId)
+        // Action when-clause needs these to evaluate true.
+        context.set('editor.text', true)
+        context.set('editor.dirty', true)
+
+        // Kick the action; the handler will await dialogs.savePath.
+        const ok = actions.run('editor.save')
+        expect(ok).toBe(true)
+        // Give the microtask a chance to open the dialog.
+        await Promise.resolve()
+        await Promise.resolve()
+        const active = dialogs.active.peek()
+        if (active?.kind !== 'savePath') throw new Error('dialog not open')
+        expect(active.suggested).toBe('Untitled-1.txt')
+
+        active.confirm('docs/hello.luau')
+        // Allow the save promise to resolve.
+        await new Promise((r) => setTimeout(r, 0))
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fake.calls.update[0]?.path).toBe('docs/hello.luau')
+        expect(fake.calls.update[0]?.body).toBe('hello world')
+        expect(wired.get('docs/hello.luau')?.path.peek()).toBe('docs/hello.luau')
+        // tempId removed from pending entries
+        expect(pendingFiles.get(tempId)).toBeUndefined()
+
+        wired.dispose()
+        dialogs.dispose()
+        activeEditor.dispose()
+        actions.dispose()
+        context.dispose()
+    })
+
+    test('untitled buffer + dialog cancelled → no save', async () => {
+        const { ActionRegistry } = await import('../actions/ActionRegistry')
+        const { ContextService } = await import('../context/ContextService')
+        const { ActiveEditorRegistry } = await import('../active-editor/ActiveEditorRegistry')
+        const { DialogService } = await import('../dialogs/DialogService')
+
+        const context = new ContextService()
+        const actions = new ActionRegistry({ context })
+        const activeEditor = new ActiveEditorRegistry()
+        const dialogs = new DialogService()
+        const wired = new TextModelService({
+            projectId: 'p1',
+            client: fake.client,
+            fileTree,
+            pendingFiles,
+            actions,
+            activeEditor,
+            dialogs,
+        })
+
+        const tempId = pendingFiles.addUntitled()
+        const docId = `unsaved:${tempId}`
+        const m = wired.getOrOpen(docId, '')
+        m.setContent('hi')
+        activeEditor.setActiveDocId(docId)
+        context.set('editor.text', true)
+        context.set('editor.dirty', true)
+
+        actions.run('editor.save')
+        await Promise.resolve()
+        await Promise.resolve()
+        const active = dialogs.active.peek()
+        if (active?.kind !== 'savePath') throw new Error('dialog not open')
+        active.cancel()
+        await new Promise((r) => setTimeout(r, 0))
+
+        expect(fake.calls.update).toEqual([])
+        expect(wired.get(docId)?.dirty.peek()).toBe(true)
+
+        wired.dispose()
+        dialogs.dispose()
+        activeEditor.dispose()
+        actions.dispose()
+        context.dispose()
     })
 })

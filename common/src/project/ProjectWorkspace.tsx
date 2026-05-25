@@ -10,6 +10,7 @@ import { Workspace, type DockId } from '../workspace'
 import { ActionHotkeyBridge, NativeMenuBridge, useProjectActions } from './actions'
 import { useDoubleTapKey } from './actions/double-tap'
 import { useTabContextMenu } from './data/tab-actions'
+import { DialogOverlay } from './DialogOverlay'
 import { DockAddToolButton } from './DockAddToolButton'
 import { DockEmptyState } from './DockEmptyState'
 import { EditorFocusBridge } from './EditorFocusBridge'
@@ -146,6 +147,7 @@ function ProjectWorkspaceInner() {
             {tabContextMenu.node}
             <SearchPopup />
             <LspUiOverlay />
+            <DialogOverlay />
         </div>
     )
 }

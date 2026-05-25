@@ -1,7 +1,6 @@
 import {
     useCallback,
     useEffect,
-    useId,
     useMemo,
     useRef,
     useState,
@@ -9,6 +8,7 @@ import {
     type ReactNode,
 } from 'react'
 import { type EditorView } from '@codemirror/view'
+import type { ReadonlySignal } from '@preact/signals-core'
 import {
     AlertCircleIcon,
     AlertTriangleIcon,
@@ -19,10 +19,14 @@ import {
 import type { Diagnostic } from 'vscode-languageserver-types'
 
 import { v1MapFilesGet, type MapFileBytes } from '@hollowcube/api'
-import type { ReadonlySignal } from '@preact/signals-core'
-import { Button, cn, Input, Label } from '@hollowcube/design-system'
+import { cn } from '@hollowcube/design-system'
 
-import { CodeEditor, type CodeEditorApi, type LiveDocController, type UsageMatch } from '../../editor'
+import {
+    CodeEditor,
+    type CodeEditorApi,
+    type LiveDocController,
+    type UsageMatch,
+} from '../../editor'
 import {
     type DiagnosticCounts,
     type EditorServices,
@@ -394,29 +398,19 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
             // from the current Text, not the value captured here.
             initialDoc: () => model.text.peek(),
             applyChanges: (changes, origin) => model.applyChanges(changes, origin),
-            subscribeExternal: (cb) =>
-                model.changes((e) => cb(e.changes, e.origin)),
+            subscribeExternal: (cb) => model.changes((e) => cb(e.changes, e.origin)),
         }
     }, [model, tab.id])
 
-    // Register the editor view + resolved language + save handler under this
-    // tab's id so globally-bound actions (`editor.format`, `editor.save`) can
-    // locate the right tab when fired from outside the editor's focus. Re-runs
-    // implicitly when CodeEditor remounts the view (e.g. when `language`
-    // changes). A ref forwards the latest `save` closure so the registered
-    // entry always sees current state.
-    const saveRef = useRef<() => Promise<boolean>>(() => Promise.resolve(true))
+    // Register the editor view + resolved language under this tab's id
+    // so globally-bound actions (`editor.format`, `editor.save`) can locate
+    // the right tab when fired from outside the editor's focus.
     const lspUri = effectivePath ? fileUriFromPath(effectivePath) : undefined
     const activeEditor = project.activeEditor
     const onViewChange = useCallback(
         (view: EditorView | null) => {
             if (view) {
-                activeEditor.register(tab.id, {
-                    view,
-                    language,
-                    save: () => saveRef.current(),
-                    lspUri,
-                })
+                activeEditor.register(tab.id, { view, language, lspUri })
             } else {
                 activeEditor.unregister(tab.id)
             }
@@ -429,8 +423,19 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         }
     }, [activeEditor, tab.id])
 
-    const [savePromptOpen, setSavePromptOpen] = useState(false)
+    // Surface save failures for this docId as an inline banner. The
+    // service still fires saveSucceeded events too — we clear the
+    // banner on those.
     const [saveError, setSaveError] = useState<unknown>(null)
+    useEffect(() => {
+        return textModels.events((evt) => {
+            if (evt.kind === 'saveFailed' && evt.docId === docId) {
+                setSaveError(evt.error.kind === 'network' ? evt.error.cause : evt.error)
+            } else if (evt.kind === 'saveSucceeded' && evt.docId === docId) {
+                setSaveError(null)
+            }
+        })
+    }, [docId, textModels])
 
     // Honor scrollToLine + flashLspRange on first mount of the tab — once
     // we've taken the hint, scrub them from the persisted payload so
@@ -463,43 +468,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         // signals that should re-fire the effect.
     }, [initialFlashLspRange, model])
 
-    const saveAtPath = useCallback(
-        async (path: string): Promise<boolean> => {
-            const result = await textModels.save(docId, { path })
-            if (!result.ok) {
-                setSaveError(result.error.kind === 'network' ? result.error.cause : result.error)
-                return false
-            }
-            // Patch the tab: drop tempId, point at path. TextModelService
-            // already rekeyed the model and removed the pending entry.
-            if (path !== docId) {
-                layout.updateTab(tab.id, {
-                    title: basename(path),
-                    payload: { path },
-                })
-            }
-            setSaveError(null)
-            return true
-        },
-        [docId, textModels, tab.id, layout],
-    )
-
-    const save = useCallback((): Promise<boolean> => {
-        const m = textModels.get(docId)
-        if (!m || !m.dirty.peek()) return Promise.resolve(true)
-        if (effectivePath) return saveAtPath(effectivePath)
-        setSavePromptOpen(true)
-        return Promise.resolve(false)
-    }, [docId, textModels, effectivePath, saveAtPath])
-
-    // Keep the active-editor-registry's save handler in sync with the latest
-    // closure. The registered handler reads through this ref so it always
-    // observes current state.
-    useEffect(() => {
-        saveRef.current = save
-    }, [save])
-
-    // Autosave is now driven inside `TextModelService` — one effect per
+    // Autosave is driven inside `TextModelService` — one effect per
     // model, trailing-edge timer. No React effect here.
 
     if (isExistingFile && fileFetch.kind === 'loading') {
@@ -528,7 +497,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                     scrollToLine={initialScrollToLine}
                     flashRange={flashRange}
                     onBlur={() => {
-                        if (effectivePath) void save()
+                        if (effectivePath) void textModels.save(docId)
                     }}
                 />
                 {language?.createEditorServices && lspUri ? (
@@ -544,16 +513,6 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
                 <div className='border-destructive/40 bg-destructive/10 text-destructive m-2 rounded-sm border px-2 py-1 text-xs'>
                     Save failed: {formatError(saveError)}
                 </div>
-            ) : null}
-            {savePromptOpen ? (
-                <SavePathPrompt
-                    suggested={pending?.untitledTitle ?? 'untitled.txt'}
-                    onCancel={() => setSavePromptOpen(false)}
-                    onConfirm={async (path) => {
-                        const ok = await saveAtPath(path)
-                        if (ok) setSavePromptOpen(false)
-                    }}
-                />
             ) : null}
         </div>
     )
@@ -630,11 +589,7 @@ function DiagnosticIndicator({
 
     const handleJump = useCallback(
         (d: Diagnostic) => {
-            const offset = lspPosToOffset(
-                getDocText(),
-                d.range.start.line,
-                d.range.start.character,
-            )
+            const offset = lspPosToOffset(getDocText(), d.range.start.line, d.range.start.character)
             apiRef.current?.jumpTo(offset)
             setOpen(false)
         },
@@ -769,49 +724,3 @@ function useDiagnosticsForUri(_client: unknown, uri: string | null): readonly Di
     return modelUseDiagnosticsForUri(uri)
 }
 
-function SavePathPrompt({
-    suggested,
-    onCancel,
-    onConfirm,
-}: {
-    suggested: string
-    onCancel: () => void
-    onConfirm: (path: string) => void
-}) {
-    const [value, setValue] = useState(suggested)
-    const inputId = useId()
-    const inputRef = useRef<HTMLInputElement | null>(null)
-    useEffect(() => {
-        inputRef.current?.focus()
-        inputRef.current?.select()
-    }, [])
-    return (
-        <div className='border-border bg-popover absolute inset-x-4 bottom-4 flex flex-col gap-2 rounded-md border p-3 shadow-lg'>
-            <Label htmlFor={inputId}>Save as</Label>
-            <Input
-                id={inputId}
-                ref={inputRef}
-                value={value}
-                onChange={(e) => setValue(e.target.value)}
-                onKeyDown={(e) => {
-                    if (e.key === 'Enter' && value.trim()) {
-                        e.preventDefault()
-                        onConfirm(value.trim())
-                    } else if (e.key === 'Escape') {
-                        e.preventDefault()
-                        onCancel()
-                    }
-                }}
-                placeholder='path/to/file.txt'
-            />
-            <div className='flex justify-end gap-2'>
-                <Button size='sm' variant='ghost' onClick={onCancel}>
-                    Cancel
-                </Button>
-                <Button size='sm' disabled={!value.trim()} onClick={() => onConfirm(value.trim())}>
-                    Save
-                </Button>
-            </div>
-        </div>
-    )
-}

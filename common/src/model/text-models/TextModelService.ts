@@ -18,25 +18,18 @@
 // invoked by `ServerEventsConnection` when the server reports a change to
 // a file we have open.
 
-import {
-    v1MapFilesUpdate,
-    type HCClient,
-    type MapFile,
-} from '@hollowcube/api'
+import { v1MapFilesUpdate, type HCClient, type MapFile } from '@hollowcube/api'
 
+import type { EditorGroupNode, Tab } from '../../workspace/types'
 import type { ActionRegistry } from '../actions/ActionRegistry'
 import type { ActiveEditorRegistry } from '../active-editor/ActiveEditorRegistry'
-import {
-    computed,
-    effect,
-    signal,
-    type ReadonlySignal,
-} from '../foundation/signal'
-import { Emitter, type Event } from '../foundation/emitter'
+import type { DialogService } from '../dialogs/DialogService'
 import type { FileTreeService } from '../files/FileTreeService'
 import type { PendingFilesService } from '../files/PendingFilesService'
-import type { WorkspaceLayoutService } from '../workspace/WorkspaceLayoutService'
+import { Emitter, type Event } from '../foundation/emitter'
+import { computed, effect, signal, type ReadonlySignal } from '../foundation/signal'
 import { makeId, resolveTargetLeaf } from '../workspace/tree-helpers'
+import type { WorkspaceLayoutService } from '../workspace/WorkspaceLayoutService'
 import {
     createTextModel,
     type DocumentId,
@@ -81,6 +74,10 @@ export interface TextModelServiceDeps {
     /** Required when `actions` is provided. `editor.newFile` opens a new
      *  untitled tab through this service. */
     layout?: WorkspaceLayoutService
+    /** Optional. When provided, the `editor.save` handler opens a
+     *  save-as path dialog through this service for untitled buffers
+     *  (instead of relying on per-tab React state). */
+    dialogs?: DialogService
 }
 
 export class TextModelService {
@@ -316,14 +313,22 @@ export class TextModelService {
     }
 
     private _registerActions(): void {
-        const { actions, activeEditor, layout, pendingFiles } = this.deps
+        const { actions, activeEditor, layout, pendingFiles, dialogs } = this.deps
         if (!actions || !activeEditor) return
 
-        const focusedEntrySave = () => {
-            const tabId = activeEditor.activeDocId.peek()
-            if (!tabId) return
-            const entry = activeEditor.get(tabId)
-            if (entry?.save) void entry.save()
+        const focusedSave = async () => {
+            const docId = activeEditor.activeDocId.peek()
+            if (!docId) return
+            const result = await this.save(docId)
+            if (result.ok) return
+            if (result.error.kind !== 'requires-path') return
+            // Untitled buffer needs a path. Open the dialog if we have one,
+            // and re-attempt the save with the chosen path.
+            if (!dialogs) return
+            const suggested = this._suggestedPathFor(docId)
+            const path = await dialogs.savePath({ suggested })
+            if (!path) return
+            await this.save(docId, { path })
         }
 
         this._actionDisposers.push(
@@ -334,7 +339,9 @@ export class TextModelService {
                 keybinding: '$mod+s',
                 when: 'editor.text && editor.dirty',
                 menu: { path: 'file', group: 'save', order: 10 },
-                run: () => focusedEntrySave(),
+                run: () => {
+                    void focusedSave()
+                },
             }),
             actions.register({
                 id: 'editor.saveAll',
@@ -375,6 +382,23 @@ export class TextModelService {
 
     // ------------- internals -------------
 
+    /** Suggested path to seed the save-as dialog when an untitled buffer
+     *  needs a path. Prefers the model's existing path (rename-target
+     *  cases), then the pending entry's untitledTitle (`Untitled-1`),
+     *  then a generic fallback. */
+    private _suggestedPathFor(docId: DocumentId): string {
+        const model = this._modelsInternal.get(docId)
+        const existing = model?.path.peek()
+        if (existing) return existing
+        const parsed = parseDocId(docId)
+        if (parsed.tempId) {
+            const pending = this.deps.pendingFiles.get(parsed.tempId)
+            if (pending?.path) return pending.path
+            if (pending?.untitledTitle) return `${pending.untitledTitle}.txt`
+        }
+        return 'untitled.txt'
+    }
+
     private async _doSave(
         model: TextModelInternal,
         path: string,
@@ -404,12 +428,45 @@ export class TextModelService {
             this._rekey(oldId, path)
             model.setPath(path)
             if (tempId) this.deps.pendingFiles.remove(tempId)
+            // Patch any open editor tabs whose payload references this
+            // tempId so they re-derive their docId from the new path
+            // (and show the basename in the tab title). Tabs that don't
+            // match are left alone. The text-model GC in `Project`
+            // depends on this — without it the GC would drop the freshly
+            // saved model because no tab's derived docId matches.
+            if (tempId) this._patchTabsForRekey(tempId, path)
             this._events.fire({ kind: 'modelRekeyed', oldId, newId: path })
         }
         // Patch the file-tree's flat map so the new size/hash are visible.
         this.deps.fileTree.upsert(file)
         this._events.fire({ kind: 'saveSucceeded', docId: path, path })
         return { ok: true, file }
+    }
+
+    /** Walk every open tab and rewrite any `editor:text` payload that
+     *  carries `tempId` so it now points at the saved `path`. Called
+     *  from `_doSave` after a successful first save promoted the doc
+     *  from `unsaved:<tempId>` to `path`. */
+    private _patchTabsForRekey(tempId: string, path: string): void {
+        const layout = this.deps.layout
+        if (!layout) return
+        const state = layout.state.peek()
+        const newTitle = basename(path)
+        const visit = (tabs: readonly Tab[]) => {
+            for (const tab of tabs) {
+                if (tab.kind !== TEXT_EDITOR_KIND) continue
+                const payload = tab.payload as { tempId?: unknown } | null | undefined
+                if (payload?.tempId !== tempId) continue
+                layout.updateTab(tab.id, {
+                    title: newTitle,
+                    payload: { path },
+                })
+            }
+        }
+        for (const dock of ['left', 'right', 'bottom'] as const) {
+            visit(state[dock].tabs)
+        }
+        walkLeafTabs(state.center, visit)
     }
 
     private _installAutosaveFor(model: TextModelInternal): void {
@@ -508,4 +565,18 @@ function parseDocId(docId: DocumentId): { path: string | null; tempId: string | 
         return { path: null, tempId: docId.slice('unsaved:'.length) }
     }
     return { path: docId, tempId: null }
+}
+
+function basename(path: string): string {
+    const i = path.lastIndexOf('/')
+    return i === -1 ? path : path.slice(i + 1)
+}
+
+function walkLeafTabs(node: EditorGroupNode, visit: (tabs: readonly Tab[]) => void): void {
+    if (node.kind === 'leaf') {
+        visit(node.tabs)
+        return
+    }
+    walkLeafTabs(node.children[0], visit)
+    walkLeafTabs(node.children[1], visit)
 }

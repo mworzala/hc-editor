@@ -71,7 +71,7 @@ const EMPTY_SNAPSHOT: EditorServices = {
 
 /** Construct a Luau LSP binding for a single editor tab. */
 export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEditorBinding {
-    const { lsp, uri, knownPaths, openEditor, showUsages, getEngineApiDoc } = deps
+    const { lsp, uri, getKnownPaths, openEditor, showUsages, getEngineApiDoc } = deps
 
     let snapshot: EditorServices = EMPTY_SNAPSHOT
     const listeners = new Set<() => void>()
@@ -142,7 +142,7 @@ export function createLuauEditorBinding(deps: LanguageEditorDeps): LanguageEdito
         showUsages(usageMatches, anchorPos, sourceRange)
     }
 
-    const resolveTargetUri = (targetUri: string) => resolveUri(targetUri, knownPaths)
+    const resolveTargetUri = (targetUri: string) => resolveUri(targetUri, getKnownPaths())
 
     function rebuildSnapshot(): void {
         const client = lsp.client.peek()

@@ -253,7 +253,15 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
     // The language module owns its LSP wiring; this component just hosts the
     // binding and renders any UI from its snapshot. Languages with no rich
     // services (JSON, plaintext) simply return null below.
-    const knownPaths = useMemo(() => [...fileTreeFiles.keys()], [fileTreeFiles])
+    //
+    // `getKnownPaths` is a stable callback that reads the current path set
+    // through a ref. Returning the array directly would invalidate the
+    // `binding` memo on every save (fileTree.upsert mints a new Map), which
+    // would rebuild the LSP extensions array — and CodeEditor's construction
+    // effect would remount the view, losing cursor/scroll/undo.
+    const fileTreeFilesRef = useRef(fileTreeFiles)
+    fileTreeFilesRef.current = fileTreeFiles
+    const getKnownPaths = useCallback(() => [...fileTreeFilesRef.current.keys()], [])
 
     // Stable accessor for the engine API doc. The bundle resolves once, early;
     // a getter (read via ref) lets the binding see it without being rebuilt.
@@ -289,7 +297,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
             lsp: project.lsp,
             uri: fileUriFromPath(effectivePath),
             path: effectivePath,
-            knownPaths,
+            getKnownPaths,
             openEditor,
             showUsages: showUsagesForBinding,
             getEngineApiDoc,
@@ -298,7 +306,7 @@ function TextTab({ tab, payload }: { tab: Tab; payload: TextEditorPayload }) {
         language,
         effectivePath,
         project.lsp,
-        knownPaths,
+        getKnownPaths,
         openEditor,
         showUsagesForBinding,
         getEngineApiDoc,

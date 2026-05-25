@@ -75,8 +75,11 @@ export type LanguageEditorDeps = {
      *  as the canonical document identity; non-LSP languages can ignore it. */
     uri: string
     /** Known project file paths. Some languages (Luau) resolve cross-file
-     *  navigation against this list. */
-    knownPaths: readonly string[]
+     *  navigation against this list. A getter (not a value) so the binding
+     *  reads the latest set lazily — the tree changes on every save (the
+     *  file's metadata is upserted) and rebuilding the binding on each save
+     *  remounts the underlying CodeMirror view, blowing away cursor/scroll. */
+    getKnownPaths: () => readonly string[]
     /** Generic "open another editor tab" dispatcher. The Luau binding uses
      *  this for cross-file goto-definition; other languages may use it for
      *  jump-to-symbol UI. */

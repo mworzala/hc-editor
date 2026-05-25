@@ -13,24 +13,24 @@
 // The `enabledActions` derived signal is the authoritative listing
 // surface — no manual subscribe/version-counter dance for consumers.
 
-import { computed, signal, type ReadonlySignal } from '../foundation/signal'
 import type { ContextService } from '../context/ContextService'
-import type { Action, ActionRunArgs } from './types'
+import { computed, signal, type ReadonlySignal } from '../foundation/signal'
+import type { Action, ActionRunArgs, AnyAction } from './types'
 
 export interface ActionRegistryDeps {
     context: ContextService
 }
 
 export class ActionRegistry {
-    private readonly _actions = signal<ReadonlyMap<string, Action>>(new Map())
+    private readonly _actions = signal<ReadonlyMap<string, AnyAction>>(new Map())
 
-    readonly enabledActions: ReadonlySignal<readonly Action[]>
+    readonly enabledActions: ReadonlySignal<readonly AnyAction[]>
 
     constructor(private readonly deps: ActionRegistryDeps) {
         // `computed` is lazy; reading `.value` registers dependencies on
         // both the action map and any context keys referenced by `when`.
         this.enabledActions = computed(() => {
-            const out: Action[] = []
+            const out: AnyAction[] = []
             for (const action of this._actions.value.values()) {
                 if (!this.deps.context.evaluate(action.when)) continue
                 out.push(action)
@@ -41,11 +41,16 @@ export class ActionRegistry {
 
     /** Register an action. Returns a disposer; calling it removes the
      *  action, but only if the entry under that id is still this exact
-     *  registration (defends against racy re-registers). */
-    register(action: Action): () => void {
-        this._writeMap((next) => next.set(action.id, action))
+     *  registration (defends against racy re-registers).
+     *
+     *  Generic over the action's payload type: `register<MyArgs>({...})`
+     *  gives the handler a typed `args` parameter. Defaults to `void`
+     *  for parameterless actions. */
+    register<TArgs = void>(action: Action<TArgs>): () => void {
+        const erased = action as AnyAction
+        this._writeMap((next) => next.set(action.id, erased))
         return () => {
-            if (this._actions.peek().get(action.id) === action) {
+            if (this._actions.peek().get(action.id) === erased) {
                 this._writeMap((next) => next.delete(action.id))
             }
         }
@@ -58,17 +63,21 @@ export class ActionRegistry {
         this._writeMap((next) => next.delete(id))
     }
 
-    get(id: string): Action | undefined {
+    get(id: string): AnyAction | undefined {
         return this._actions.peek().get(id)
     }
 
-    list(): readonly Action[] {
+    list(): readonly AnyAction[] {
         return [...this._actions.peek().values()]
     }
 
     /** Run the action under `id`, evaluating its when-clause first.
      *  Returns `true` if the handler was invoked; `false` if the action
      *  was missing, gated by its when-clause, or `disabled`.
+     *
+     *  `args` is `unknown` because the id → payload-type relationship is
+     *  dynamic at the run boundary — the handler narrows the type. Use
+     *  `register<TArgs>` to type-check the handler at registration time.
      *
      *  Errors thrown synchronously from `run` are caught and logged so a
      *  single bad action can't take down the caller; async errors are
@@ -94,7 +103,7 @@ export class ActionRegistry {
 
     /** Find the action whose keybinding matches the given binding string.
      *  Linear scan; the keybinding set is small in practice. */
-    actionForKeybinding(binding: string): Action | undefined {
+    actionForKeybinding(binding: string): AnyAction | undefined {
         for (const action of this._actions.peek().values()) {
             if (action.keybinding === binding) return action
         }
@@ -105,7 +114,7 @@ export class ActionRegistry {
         this._actions.value = new Map()
     }
 
-    private _writeMap(mutate: (next: Map<string, Action>) => void): void {
+    private _writeMap(mutate: (next: Map<string, AnyAction>) => void): void {
         const next = new Map(this._actions.peek())
         mutate(next)
         this._actions.value = next

@@ -26,6 +26,7 @@ export {
     type ActionRegistryDeps,
     type ActionRunArgs,
     type ActionRunSource,
+    type AnyAction,
     type MenuPath,
     MENU_PATHS,
 } from './actions'

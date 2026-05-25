@@ -57,7 +57,14 @@ describe('ActionRegistry — registration', () => {
 describe('ActionRegistry — run', () => {
     test('run invokes the handler with args; returns true', () => {
         let received: unknown
-        registry.register(makeAction({ id: 'a', run: (args) => { received = args } }))
+        registry.register(
+            makeAction({
+                id: 'a',
+                run: (args) => {
+                    received = args
+                },
+            }),
+        )
         expect(registry.run('a', { x: 1 })).toBe(true)
         expect(received).toEqual({ x: 1 })
     })
@@ -68,7 +75,15 @@ describe('ActionRegistry — run', () => {
 
     test('run with a when-clause that is false returns false and does not invoke', () => {
         let called = 0
-        registry.register(makeAction({ id: 'a', when: 'gate', run: () => { called++ } }))
+        registry.register(
+            makeAction({
+                id: 'a',
+                when: 'gate',
+                run: () => {
+                    called++
+                },
+            }),
+        )
         expect(registry.run('a')).toBe(false)
         expect(called).toBe(0)
         context.set('gate', true)
@@ -78,7 +93,15 @@ describe('ActionRegistry — run', () => {
 
     test('run on a disabled action returns false', () => {
         let called = 0
-        registry.register(makeAction({ id: 'a', disabled: true, run: () => { called++ } }))
+        registry.register(
+            makeAction({
+                id: 'a',
+                disabled: true,
+                run: () => {
+                    called++
+                },
+            }),
+        )
         expect(registry.run('a')).toBe(false)
         expect(called).toBe(0)
     })
@@ -86,9 +109,18 @@ describe('ActionRegistry — run', () => {
     test('synchronous throws are caught and logged', () => {
         const originalError = console.error
         const errors: unknown[] = []
-        console.error = (...args) => { errors.push(args) }
+        console.error = (...args) => {
+            errors.push(args)
+        }
         try {
-            registry.register(makeAction({ id: 'a', run: () => { throw new Error('boom') } }))
+            registry.register(
+                makeAction({
+                    id: 'a',
+                    run: () => {
+                        throw new Error('boom')
+                    },
+                }),
+            )
             expect(registry.run('a')).toBe(true)
             expect(errors).toHaveLength(1)
         } finally {
@@ -146,5 +178,38 @@ describe('ActionRegistry — disposal', () => {
         registry.dispose()
         expect(registry.list()).toEqual([])
         expect(registry.enabledActions.value).toEqual([])
+    })
+})
+
+describe('ActionRegistry — typed payloads', () => {
+    type Args = { path: string; line?: number }
+    test('register<TArgs> hands the handler a typed args parameter', () => {
+        let captured: Args | undefined
+        registry.register<Args>({
+            id: 'navigate',
+            title: 'Navigate',
+            run: (args) => {
+                // Compile-time: args is typed as Args (not unknown).
+                captured = args
+            },
+        })
+        registry.run('navigate', { path: 'foo.txt', line: 12 })
+        expect(captured?.path).toBe('foo.txt')
+        expect(captured?.line).toBe(12)
+    })
+
+    test('runtime args at the run boundary are unchecked (handler narrows)', () => {
+        let kind: string | undefined
+        registry.register<Args>({
+            id: 'navigate',
+            title: 'Navigate',
+            run: (args) => {
+                kind = typeof args
+            },
+        })
+        // Caller passes a value that wouldn't satisfy Args — registry doesn't
+        // validate; handler is expected to defend itself.
+        registry.run('navigate', 'not-an-object' as unknown)
+        expect(kind).toBe('string')
     })
 })

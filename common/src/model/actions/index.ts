@@ -5,5 +5,6 @@ export {
     type ActionMenu,
     type ActionRunArgs,
     type ActionRunSource,
+    type AnyAction,
     type MenuPath,
 } from './types'

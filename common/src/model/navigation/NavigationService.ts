@@ -128,20 +128,19 @@ export class NavigationService {
     private _registerActions(): void {
         const { actions } = this.deps
         this._actionDisposers.push(
-            actions.register({
+            actions.register<OpenEditorArgs>({
                 id: 'workspace.openEditor',
                 title: 'Open Editor',
                 run: (args) => {
-                    this.openEditor((args ?? {}) as OpenEditorArgs)
+                    this.openEditor(args ?? {})
                 },
             }),
-            actions.register({
+            actions.register<OpenToolArgs>({
                 id: 'workspace.openTool',
                 title: 'Open Tool',
                 run: (args) => {
-                    const a = (args ?? {}) as OpenToolArgs
-                    if (!a.kind) return
-                    this.openTool(a)
+                    if (!args || !args.kind) return
+                    this.openTool(args)
                 },
             }),
         )

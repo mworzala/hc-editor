@@ -6,9 +6,9 @@
 
 import type { HCClient } from '@hollowcube/api'
 
-import type { AuthStatus, Session } from '../../auth/types'
 import { useSignal } from '../foundation/react'
 import { useApp } from '../foundation/react'
+import type { AuthStatus, Session } from './types'
 
 export interface AuthContextValue {
     status: AuthStatus

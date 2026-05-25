@@ -1,11 +1,19 @@
+// React/web-only auth surfaces (gate component, launcher UI, the
+// sessionStorage-backed active-project shim for web). Primitives that the
+// model layer needs (dpop, keystore, sessionstore, redeem, tokens, types,
+// idb, launch-code) live alongside `AuthService` in `../model/auth/`.
+
 export { useAuth, type AuthContextValue } from '../model/auth/react'
 export { AuthGate, OpenFromGame } from './gate'
 export { Launcher } from './launcher'
-export { createHashLaunchCodeSource } from './launch-code'
-export { createWebCryptoKeyStore } from './keystore'
-export { createIndexedDbSessionStore, createMemorySessionStore } from './sessionstore'
-export { createTokenManager, type TokenManager, type TokenManagerDeps } from './tokens'
-export { redeemLaunchCode, type RedeemDeps, type RedeemOutcome } from './redeem'
+export { createHashLaunchCodeSource } from '../model/auth/launch-code'
+export { createWebCryptoKeyStore } from '../model/auth/keystore'
+export {
+    createIndexedDbSessionStore,
+    createMemorySessionStore,
+} from '../model/auth/sessionstore'
+export { createTokenManager, type TokenManager, type TokenManagerDeps } from '../model/auth/tokens'
+export { redeemLaunchCode, type RedeemDeps, type RedeemOutcome } from '../model/auth/redeem'
 export { getActiveProjectId, setActiveProjectId } from './active-project'
 export {
     buildClientKeyProof,
@@ -13,7 +21,7 @@ export {
     jwkThumbprint,
     sha256Base64Url,
     type DpopProofInput,
-} from './dpop'
+} from '../model/auth/dpop'
 export type {
     AccountMeta,
     AuthStatus,
@@ -21,4 +29,4 @@ export type {
     SessionAuthState,
     SessionStore,
     StoredSession,
-} from './types'
+} from '../model/auth/types'

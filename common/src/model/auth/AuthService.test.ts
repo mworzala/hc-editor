@@ -2,20 +2,19 @@ import { afterEach, beforeEach, describe, expect, test } from 'bun:test'
 
 import type { HCClient } from '@hollowcube/api'
 
-import { createMemorySessionStore } from '../../auth/sessionstore'
-import type { ClientKeyStore } from '../../auth/keystore'
 import type { Platform, LaunchCodeSource } from '../../platform'
 import { createMemoryStorage } from '../../platform'
 import { AuthService } from './AuthService'
+import type { ClientKeyStore } from './keystore'
+import { createMemorySessionStore } from './sessionstore'
 
 // --- fakes ---
 
 async function makeKeyStore(): Promise<ClientKeyStore> {
-    const pair = (await crypto.subtle.generateKey(
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        true,
-        ['sign', 'verify'],
-    )) as CryptoKeyPair
+    const pair = (await crypto.subtle.generateKey({ name: 'ECDSA', namedCurve: 'P-256' }, true, [
+        'sign',
+        'verify',
+    ])) as CryptoKeyPair
     const jwk = (await crypto.subtle.exportKey('jwk', pair.publicKey)) as JsonWebKey
     return {
         getOrCreate: () => Promise.resolve(pair),
@@ -127,7 +126,8 @@ describe('AuthService — successful redeem', () => {
         })
         await settle(svc)
         const status = svc.status.peek()
-        if (status.kind !== 'authenticated') throw new Error(`expected authenticated, got ${status.kind}`)
+        if (status.kind !== 'authenticated')
+            throw new Error(`expected authenticated, got ${status.kind}`)
         expect(status.account).toBe('acct-1')
         expect(svc.activeAccount.peek()).toBe('acct-1')
         expect(svc.grantedProject.peek()).toBe('project-1')
@@ -185,10 +185,7 @@ describe('AuthService — redeem failure paths', () => {
         await settle(svc)
         // Multiple sessions → picking.
         expect(svc.status.peek().kind).toBe('picking')
-        expect(svc.sessions.peek().map((s) => s.account)).toEqual([
-            'acct-existing',
-            'acct-other',
-        ])
+        expect(svc.sessions.peek().map((s) => s.account)).toEqual(['acct-existing', 'acct-other'])
         svc.dispose()
     })
 })

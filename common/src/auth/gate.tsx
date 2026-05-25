@@ -3,8 +3,8 @@ import { type ReactNode } from 'react'
 import { Button } from '@hollowcube/design-system'
 
 import { useAuth } from '../model/auth/react'
+import { IndexedDbUnavailableError } from '../model/auth/idb'
 import { usePlatform } from '../platform'
-import { IndexedDbUnavailableError } from './idb'
 import { Launcher } from './launcher'
 
 function Centered({ children }: { children: ReactNode }) {

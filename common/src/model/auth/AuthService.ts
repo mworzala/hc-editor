@@ -14,14 +14,14 @@
 import { HCClient, type HCAuthHook } from '@hollowcube/api'
 
 import type { LaunchCodeSource, Platform } from '../../platform'
-import { buildDpopProof } from '../../auth/dpop'
-import { createWebCryptoKeyStore, type ClientKeyStore } from '../../auth/keystore'
-import { createHashLaunchCodeSource } from '../../auth/launch-code'
-import { redeemLaunchCode } from '../../auth/redeem'
-import { createIndexedDbSessionStore } from '../../auth/sessionstore'
-import { createTokenManager, type TokenManager } from '../../auth/tokens'
-import type { AuthStatus, Session, SessionStore, StoredSession } from '../../auth/types'
 import { computed, signal, type ReadonlySignal, type Signal } from '../foundation/signal'
+import { buildDpopProof } from './dpop'
+import { createWebCryptoKeyStore, type ClientKeyStore } from './keystore'
+import { createHashLaunchCodeSource } from './launch-code'
+import { redeemLaunchCode } from './redeem'
+import { createIndexedDbSessionStore } from './sessionstore'
+import { createTokenManager, type TokenManager } from './tokens'
+import type { AuthStatus, Session, SessionStore, StoredSession } from './types'
 
 export interface AuthServiceDeps {
     platform: Platform

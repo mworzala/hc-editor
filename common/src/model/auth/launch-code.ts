@@ -1,4 +1,4 @@
-import type { LaunchCodeSource } from '../platform'
+import type { LaunchCodeSource } from '../../platform'
 
 // FLAG(backend): web launch-code transport. The game directs the browser to a
 // URL whose fragment carries the launch grant after a fixed `§k=` marker, e.g.

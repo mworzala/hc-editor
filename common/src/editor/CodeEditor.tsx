@@ -12,6 +12,7 @@ import {
     foldAll,
     foldKeymap,
     indentOnInput,
+    indentUnit,
     syntaxHighlighting,
     unfoldAll,
 } from '@codemirror/language'
@@ -227,6 +228,12 @@ function CodeEditor({
         const extensions: Extension[] = [
             history(),
             drawSelection(),
+            // 4-space indentation. `indentUnit` controls what auto-indent
+            // inserts (and what `indentWithTab` emits when the file uses
+            // spaces); `EditorState.tabSize` controls the visual width of a
+            // literal `\t`. Matches the project's oxfmt config (4-space).
+            indentUnit.of('    '),
+            EditorState.tabSize.of(4),
             indentOnInput(),
             bracketMatching(),
             syntaxHighlighting(defaultHighlightStyle, { fallback: true }),

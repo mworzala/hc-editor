@@ -43,7 +43,6 @@ import {
 } from '../../lsp/docModules'
 import { loadLuauFFlags } from '../../lsp/fflags'
 import { LspClient, type LspState } from '../../lsp/LspClient'
-import { LspUiBus } from '../../lsp/ui/lsp-ui-bus'
 import { pathFromFileUri } from '../../lsp/uriResolver'
 import { startWorkspaceDiagnosticPolling } from '../../lsp/workspaceDiagnostics'
 import type { ActionRegistry } from '../actions/ActionRegistry'
@@ -52,6 +51,7 @@ import type { ContextService } from '../context/ContextService'
 import { computed, effect, signal, type ReadonlySignal, type Signal } from '../foundation/signal'
 import type { SearchService } from '../search/SearchService'
 import type { TextModelService } from '../text-models/TextModelService'
+import { LspUiBus } from './lsp-ui-bus'
 
 /** LSP `PrepareRenameResult` covers three response shapes the server can
  *  send. `vscode-languageserver-types` doesn't ship a union for it, so we
@@ -316,6 +316,7 @@ export class LspService {
         this._contextDisposers.length = 0
         this._searchSourceDisposer?.()
         this._diagnosticsByUri.clear()
+        this.ui.dispose()
     }
 
     // ----- Action handlers -----

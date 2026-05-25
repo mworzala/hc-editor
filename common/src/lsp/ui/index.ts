@@ -1,3 +1,6 @@
-export { LspUiBus, type CodeActionMenuState, type RenamePromptState } from './lsp-ui-bus'
-export { useLspUiBus, useLspUiSnapshot } from './lsp-ui-context'
+export {
+    LspUiBus,
+    type CodeActionMenuState,
+    type RenamePromptState,
+} from '../../model/lsp/lsp-ui-bus'
 export { LspUiOverlay } from './LspUiOverlay'

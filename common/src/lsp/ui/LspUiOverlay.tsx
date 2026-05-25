@@ -12,23 +12,27 @@ import {
     PopoverContent,
 } from '@hollowcube/design-system'
 
+import { useProject } from '../../model/foundation/react'
+import { useSignal } from '../../model/foundation/react'
+import type { CodeActionMenuState, RenamePromptState } from '../../model/lsp/lsp-ui-bus'
 import { usePointAnchor } from '../../utils/virtual-anchor'
-import { type CodeActionMenuState, type RenamePromptState } from './lsp-ui-bus'
-import { useLspUiBus, useLspUiSnapshot } from './lsp-ui-context'
 
 // Top-level overlay that renders the code-action menu + rename input. Mounted
 // once near the workspace root so positioning is relative to the viewport.
+// Each slot subscribes to its own signal so opening the code-action menu
+// doesn't re-render the rename popover (and vice versa).
 
 export function LspUiOverlay() {
-    const snap = useLspUiSnapshot()
-    const bus = useLspUiBus()
+    const bus = useProject().lsp.ui
+    const codeAction = useSignal(bus.codeAction)
+    const rename = useSignal(bus.rename)
     return (
         <>
-            {snap.codeAction ? (
-                <CodeActionMenu state={snap.codeAction} onClose={() => bus.closeCodeActionMenu()} />
+            {codeAction ? (
+                <CodeActionMenu state={codeAction} onClose={() => bus.closeCodeActionMenu()} />
             ) : null}
-            {snap.rename ? (
-                <RenamePrompt state={snap.rename} onClose={() => bus.closeRenamePrompt()} />
+            {rename ? (
+                <RenamePrompt state={rename} onClose={() => bus.closeRenamePrompt()} />
             ) : null}
         </>
     )

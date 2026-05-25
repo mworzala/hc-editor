@@ -8,8 +8,8 @@
 //
 //   • `derive(key, fn)` — most context keys are pure functions of other
 //     signals (`editorDirty` is "is the active doc's `dirty` signal true?").
-//     The function is wrapped in `computed(...)` and mirrored into the
-//     key's stable backing signal via an `effect`.
+//     An `effect` writes the function's value into the key's stable
+//     backing signal whenever any upstream signal it reads changes.
 //
 //   • `set(key, value)` — a few keys are pushed in from outside the model
 //     layer (notably `editorFocused` from React's focus events). The
@@ -19,9 +19,9 @@
 // identity for subscribers: a consumer that read `evaluate('editorDirty')`
 // before `derive('editorDirty', ...)` was called still gets notified when
 // the derived value first becomes available, because subscription is to
-// the backing signal — not to the computed that feeds it.
+// the backing signal — not to the closure that feeds it.
 
-import { computed, effect, signal, type Signal } from '../foundation/signal'
+import { effect, signal, type Signal } from '../foundation/signal'
 import {
     evaluateWhenClause,
     parseWhenClause,
@@ -34,30 +34,31 @@ export class ContextService {
     private readonly _derivedDisposers = new Map<string, () => void>()
     private readonly _astCache = new Map<string, WhenAst>()
 
-    /** Register a derived context key. The function is wrapped in
-     *  `computed(...)`; an `effect` mirrors its value into the key's
-     *  stable backing signal. Calling `derive` again with the same key
-     *  replaces the prior derivation. */
+    /** Register a derived context key. An `effect` is installed that
+     *  writes `fn()`'s value into the key's stable backing signal each
+     *  time any upstream signal `fn` reads changes. Calling `derive`
+     *  again with the same key replaces the prior derivation. */
     derive(key: string, fn: () => unknown): () => void {
         this._disposeDerived(key)
         const backing = this._ensure(key)
-        const c = computed(() => fn())
         const stop = effect(() => {
-            backing.value = c.value
+            backing.value = fn()
         })
-        const dispose = () => {
-            if (this._derivedDisposers.get(key) === dispose) {
+        this._derivedDisposers.set(key, stop)
+        return () => {
+            // Only honor this disposer if it's still the live one for the
+            // key — defends against re-derive followed by an old caller
+            // calling the stale dispose.
+            if (this._derivedDisposers.get(key) === stop) {
                 this._derivedDisposers.delete(key)
                 stop()
             }
         }
-        this._derivedDisposers.set(key, dispose)
-        return dispose
     }
 
     /** Set a key imperatively. If the key was previously installed as a
-     *  derivation, the derivation is replaced (its mirror effect is
-     *  stopped) and the explicit value takes over. */
+     *  derivation, the derivation is replaced (its effect is stopped)
+     *  and the explicit value takes over. */
     set(key: string, value: unknown): void {
         this._disposeDerived(key)
         this._ensure(key).value = value
@@ -104,7 +105,7 @@ export class ContextService {
         // Snapshot to a local array first: the disposers each call back
         // into the map to remove themselves, and mutating it under a
         // direct iterator is asking for trouble.
-        const disposers = Array.from(this._derivedDisposers.values())
+        const disposers = [...this._derivedDisposers.values()]
         for (const d of disposers) d()
         this._derivedDisposers.clear()
         this._backing.clear()
@@ -121,7 +122,10 @@ export class ContextService {
     }
 
     private _disposeDerived(key: string): void {
-        const d = this._derivedDisposers.get(key)
-        if (d) d()
+        const stop = this._derivedDisposers.get(key)
+        if (stop) {
+            this._derivedDisposers.delete(key)
+            stop()
+        }
     }
 }
